@@ -1,0 +1,16 @@
+{
+  "name": "visited-places",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w apps/web",
+    "dev:api": "npm run dev -w apps/api",
+    "build": "npm run build -w apps/web",
+    "preview": "npm run preview -w apps/web",
+    "data": "python3 tools/build_data.py"
+  }
+}
