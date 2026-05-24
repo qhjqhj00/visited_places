@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { store } from './store';
+import { store, initStore } from './store';
 import { byId, resolveCity } from './cities';
 import { expandCities } from './minimax';
 
@@ -25,6 +25,23 @@ app.put('/api/map', async (c) => {
   const ids = (body.ids ?? []).filter((x: unknown) => Number.isInteger(x));
   store.setMap(uid, ids);
   return c.json({ ok: true, count: ids.length });
+});
+
+// ── ad-hoc "custom" places picked off the basemap (full objects) ─────────
+app.get('/api/places', (c) => {
+  const uid = c.req.header('x-user-id');
+  return c.json({ places: uid ? store.getPlaces(uid) : [] });
+});
+
+app.put('/api/places', async (c) => {
+  const uid = c.req.header('x-user-id');
+  if (!uid) return c.json({ error: 'missing x-user-id' }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const places = (Array.isArray(body.places) ? body.places : []).filter(
+    (p: any) => p && typeof p.id === 'number' && typeof p.lat === 'number' && typeof p.lng === 'number'
+  );
+  store.setPlaces(uid, places);
+  return c.json({ ok: true, count: places.length });
 });
 
 // ── share links ─────────────────────────────────────────────────────────
@@ -94,5 +111,7 @@ app.post('/api/expand', async (c) => {
 
 const port = Number(process.env.PORT) || 3001;
 const hostname = process.env.HOST || '0.0.0.0';
-serve({ fetch: app.fetch, port, hostname });
-console.log(`api listening on http://${hostname}:${port} (${byId.size} cities loaded)`);
+initStore().then(() => {
+  serve({ fetch: app.fetch, port, hostname });
+  console.log(`api listening on http://${hostname}:${port} (${byId.size} cities loaded)`);
+});

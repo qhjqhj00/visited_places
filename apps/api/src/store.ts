@@ -1,49 +1,101 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
+import initSqlJs from 'sql.js';
 
-// Tiny JSON-file store. Adequate for v1 volume (maps/shares/expand cache) and
-// dependency-free. Swap for Postgres/SQLite when traffic warrants — the call
-// sites only touch this `store` interface.
-interface DB {
-  maps: Record<string, number[]>; // user_id -> city ids
-  shares: Record<string, number[]>; // code -> city ids
-  cache: Record<string, number[]>; // anchor_id -> resolved city ids
-}
-
+// SQLite persistence via sql.js (WASM — no native build, unlike better-sqlite3
+// which needs node-gyp). The whole DB lives in memory and is flushed to a real
+// `data.sqlite` file (standard SQLite format) on each write. Id lists are stored
+// as JSON text per row, mirroring the previous store's array-in/array-out shape;
+// normalise into city rows later if querying across maps is ever needed.
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const FILE = path.resolve(dir, '../data.json');
+const DB_FILE = path.resolve(dir, '../data.sqlite');
+const JSON_FILE = path.resolve(dir, '../data.json'); // legacy store, migrated once
+const require = createRequire(import.meta.url);
 
-let data: DB = { maps: {}, shares: {}, cache: {} };
-try {
-  data = { maps: {}, shares: {}, cache: {}, ...JSON.parse(fs.readFileSync(FILE, 'utf8')) };
-} catch {
-  /* fresh store */
-}
+type DB = {
+  run: (sql: string, params?: unknown[]) => void;
+  exec: (sql: string, params?: unknown[]) => Array<{ values: unknown[][] }>;
+  export: () => Uint8Array;
+};
+let db: DB;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 function persist() {
   if (timer) return;
   timer = setTimeout(() => {
     timer = null;
-    fs.writeFile(FILE, JSON.stringify(data), () => {});
+    try {
+      fs.writeFileSync(DB_FILE, Buffer.from(db.export()));
+    } catch {
+      /* best effort */
+    }
   }, 50);
 }
 
+const list = (rows: Array<{ values: unknown[][] }>): number[] | undefined =>
+  rows.length ? (JSON.parse(rows[0].values[0][0] as string) as number[]) : undefined;
+
+export async function initStore(): Promise<void> {
+  const SQL = await initSqlJs({
+    locateFile: (f: string) => path.join(path.dirname(require.resolve('sql.js')), f),
+  });
+  db = fs.existsSync(DB_FILE) ? new SQL.Database(fs.readFileSync(DB_FILE)) : new SQL.Database();
+  db.run(
+    `CREATE TABLE IF NOT EXISTS maps   (uid TEXT PRIMARY KEY, ids TEXT NOT NULL);
+     CREATE TABLE IF NOT EXISTS shares (code TEXT PRIMARY KEY, ids TEXT NOT NULL);
+     CREATE TABLE IF NOT EXISTS cache  (anchor INTEGER PRIMARY KEY, ids TEXT NOT NULL);
+     CREATE TABLE IF NOT EXISTS places (uid TEXT PRIMARY KEY, json TEXT NOT NULL);`
+  );
+  const empty = !db.exec('SELECT 1 FROM maps LIMIT 1').length;
+  if (empty && fs.existsSync(JSON_FILE)) migrateFromJson();
+  persist();
+}
+
+/** One-time import of the legacy JSON store. Seeds userid "0" (the single bucket
+ * used until login) with the largest existing map = the current working data. */
+function migrateFromJson() {
+  let j: { maps?: Record<string, number[]>; shares?: Record<string, number[]>; cache?: Record<string, number[]> };
+  try {
+    j = JSON.parse(fs.readFileSync(JSON_FILE, 'utf8'));
+  } catch {
+    return;
+  }
+  let current: number[] = [];
+  for (const ids of Object.values(j.maps ?? {})) if (ids.length > current.length) current = ids;
+  store.setMap('0', current);
+  for (const [code, ids] of Object.entries(j.shares ?? {})) store.addShare(code, ids);
+  for (const [anchor, ids] of Object.entries(j.cache ?? {})) store.setCache(Number(anchor), ids);
+  console.log(`migrated legacy store → userid "0" seeded with ${current.length} cities`);
+}
+
 export const store = {
-  getMap: (uid: string): number[] => data.maps[uid] ?? [],
+  getMap: (uid: string): number[] =>
+    list(db.exec('SELECT ids FROM maps WHERE uid=?', [uid])) ?? [],
   setMap: (uid: string, ids: number[]) => {
-    data.maps[uid] = ids;
+    db.run('INSERT OR REPLACE INTO maps (uid, ids) VALUES (?, ?)', [uid, JSON.stringify(ids)]);
     persist();
   },
-  getShare: (code: string): number[] | undefined => data.shares[code],
+  getShare: (code: string): number[] | undefined =>
+    list(db.exec('SELECT ids FROM shares WHERE code=?', [code])),
   addShare: (code: string, ids: number[]) => {
-    data.shares[code] = ids;
+    db.run('INSERT OR REPLACE INTO shares (code, ids) VALUES (?, ?)', [code, JSON.stringify(ids)]);
     persist();
   },
-  getCache: (anchorId: number): number[] | undefined => data.cache[String(anchorId)],
+  getCache: (anchorId: number): number[] | undefined =>
+    list(db.exec('SELECT ids FROM cache WHERE anchor=?', [anchorId])),
   setCache: (anchorId: number, ids: number[]) => {
-    data.cache[String(anchorId)] = ids;
+    db.run('INSERT OR REPLACE INTO cache (anchor, ids) VALUES (?, ?)', [anchorId, JSON.stringify(ids)]);
+    persist();
+  },
+  // ad-hoc places picked off the basemap (full objects), so they resolve anywhere
+  getPlaces: (uid: string): unknown[] => {
+    const r = db.exec('SELECT json FROM places WHERE uid=?', [uid]);
+    return r.length ? (JSON.parse(r[0].values[0][0] as string) as unknown[]) : [];
+  },
+  setPlaces: (uid: string, places: unknown[]) => {
+    db.run('INSERT OR REPLACE INTO places (uid, json) VALUES (?, ?)', [uid, JSON.stringify(places)]);
     persist();
   },
 };

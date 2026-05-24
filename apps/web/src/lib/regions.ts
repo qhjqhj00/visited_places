@@ -68,12 +68,28 @@ export function loadRegions(): Promise<void> {
       bbox: bboxOf(f.geometry),
     }));
     const cfc: any = feature(c50, c50.objects.countries);
-    countriesById = new Map(
-      cfc.features.map((f: any) => [
-        String(f.id),
-        { id: String(f.id), geometry: f.geometry, bbox: bboxOf(f.geometry) } as Poly,
-      ])
-    );
+    // A country can appear as several features sharing one ISO id (e.g. AU =
+    // mainland + a separate Ashmore Island ring). Merge them into one MultiPolygon
+    // so the whole country fills / hit-tests — a plain Map would keep only the last,
+    // which is how Australia was collapsing to a single tiny island.
+    const byId = new Map<string, any[]>();
+    for (const f of cfc.features) {
+      if (f.id == null) continue;
+      const id = String(f.id);
+      const a = byId.get(id);
+      if (a) a.push(f.geometry);
+      else byId.set(id, [f.geometry]);
+    }
+    countriesById = new Map();
+    for (const [id, geoms] of byId) {
+      const coords: any[] = [];
+      for (const g of geoms) {
+        if (g.type === 'Polygon') coords.push(g.coordinates);
+        else if (g.type === 'MultiPolygon') coords.push(...g.coordinates);
+      }
+      const geometry = { type: 'MultiPolygon', coordinates: coords };
+      countriesById.set(id, { id, geometry, bbox: bboxOf(geometry) });
+    }
   })();
   return ready;
 }
@@ -86,8 +102,24 @@ const fc = (features: any[]) => ({ type: 'FeatureCollection', features });
 const marker = (c: City) => ({
   type: 'Feature',
   geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
-  properties: { cc: c.cc, label: c.en, zh: c.zh || '', r: dotR(c.prom) },
+  properties: { id: c.id, cc: c.cc, label: c.en, zh: c.zh || '', r: dotR(c.prom) },
 });
+
+/** Point FeatureCollection of the given cities (each individually, with its id). */
+export function markersFC(cities: City[]): any {
+  return fc(cities.map(marker));
+}
+
+/** Candidate dots: dataset cities offered for on-map selection (hollow style). */
+export function candidatesFC(cities: City[]): any {
+  return fc(
+    cities.map((c) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [c.lng, c.lat] },
+      properties: { id: c.id, label: c.en, zh: c.zh || '' },
+    }))
+  );
+}
 
 export interface ViewData {
   regionFC: any;
@@ -119,7 +151,19 @@ export function buildGlobal(cities: City[]): ViewData {
   return { regionFC: fc(regionFeatures), markerFC: fc([...groups.values()].map(marker)) };
 }
 
-/** Drill: provinces of one country filled, every visited city dotted. */
+/** Invisible hit-test layer: every country we can map to a 2-letter code, so a
+ * click anywhere (even an unvisited country) resolves to a `cc` to drill into. */
+export function allCountriesFC(ccnToCc: Map<string, string>): any {
+  const features: any[] = [];
+  for (const [ccn, poly] of countriesById) {
+    const cc = ccnToCc.get(ccn);
+    if (cc) features.push({ type: 'Feature', geometry: poly.geometry, properties: { cc } });
+  }
+  return fc(features);
+}
+
+/** Drill: only the provinces you've actually visited are filled; every visited
+ * city is dotted. (No whole-country fill — unvisited provinces stay uncolored.) */
 export function buildCountry(cities: City[], cc: string): ViewData {
   const inCc = cities.filter((c) => c.cc === cc);
   const seen = new Set<string>();

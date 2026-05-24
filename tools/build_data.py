@@ -2,7 +2,9 @@
 """Build the city dataset for the visited_places dashboard.
 
 Inputs (downloaded to .cache/ if missing):
-  - GeoNames cities15000.zip  -> cities15000.txt  (pop > 15,000, ~33k cities)
+  - GeoNames cities5000.zip   -> cities5000.txt   (pop > 5,000, ~63k places; ~39k
+    after subdivision dedup — chosen over cities15000 so tourist towns like
+    Queenstown NZ (~10k) are present, matching the basemap's label density)
   - GeoNames countryInfo.txt  -> country code -> name + continent
 
 Outputs (apps/web/public/data/):
@@ -27,7 +29,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "tools", ".cache")
 OUT = os.path.join(ROOT, "apps", "web", "public", "data")
 
-CITIES_URL = "https://download.geonames.org/export/dump/cities15000.zip"
+CITIES_URL = "https://download.geonames.org/export/dump/cities5000.zip"
+CITIES_TXT = "cities5000.txt"  # member inside the zip (pop > 5,000, ~55k places)
 COUNTRY_URL = "https://download.geonames.org/export/dump/countryInfo.txt"
 
 HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
@@ -58,9 +61,9 @@ def fetch(url, dest):
 
 
 def load_cities_txt():
-    zpath = fetch(CITIES_URL, os.path.join(CACHE, "cities15000.zip"))
+    zpath = fetch(CITIES_URL, os.path.join(CACHE, os.path.basename(CITIES_URL)))
     with zipfile.ZipFile(zpath) as z:
-        with z.open("cities15000.txt") as f:
+        with z.open(CITIES_TXT) as f:
             return io.TextIOWrapper(f, encoding="utf-8").read().splitlines()
 
 

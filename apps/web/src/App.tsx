@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCityData } from './hooks/useCityData';
 import { useVisited } from './hooks/useVisited';
+import { useCustomPlaces, customPlaceId } from './hooks/useCustomPlaces';
 import { computeStats } from './lib/stats';
 import { api } from './lib/api';
 import { applyTheme, themes } from './theme';
@@ -17,6 +18,7 @@ import ExportPanel from './components/ExportPanel';
 export default function App() {
   const { data, error } = useCityData();
   const { ids, add, remove, clear, replace } = useVisited();
+  const { places: customPlaces, addPlace } = useCustomPlaces();
 
   const [themeName, setThemeName] = useState<string>(
     () => localStorage.getItem('theme.v1') || 'claude'
@@ -52,14 +54,87 @@ export default function App() {
     saveTimer.current = window.setTimeout(() => api.saveMap(ids).catch(() => {}), 700);
   }, [ids]);
 
+  const ccnToCc = useMemo(
+    () => new Map((data?.all ?? []).map((c) => [c.ccn, c.cc] as [string, string])),
+    [data]
+  );
+  // Per-country fit box from its most prominent cities — robust against far-flung
+  // overseas territories / antimeridian that wreck a raw country-polygon bbox.
+  const countryBounds = useMemo(() => {
+    const byCc = new Map<string, City[]>();
+    for (const c of data?.all ?? []) {
+      const a = byCc.get(c.cc);
+      if (a) a.push(c);
+      else byCc.set(c.cc, [c]);
+    }
+    const out = new Map<string, [number, number, number, number]>();
+    for (const [cc, list] of byCc) {
+      const top = [...list].sort((a, b) => b.prom - a.prom).slice(0, 25);
+      let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+      for (const c of top) {
+        if (c.lng < w) w = c.lng;
+        if (c.lng > e) e = c.lng;
+        if (c.lat < s) s = c.lat;
+        if (c.lat > n) n = c.lat;
+      }
+      out.set(cc, [w, s, e, n]);
+    }
+    return out;
+  }, [data]);
+  // id → City, including ad-hoc places picked from the basemap, so their negative
+  // ids resolve everywhere (selection, map, stats, grouping, export).
+  const byIdAll = useMemo(() => {
+    const m = new Map<number, City>(data?.byId ?? []);
+    for (const p of customPlaces) m.set(p.id, p);
+    return m;
+  }, [data, customPlaces]);
+
+  // Add a place clicked straight off the basemap. Country/continent are inherited
+  // from the nearest dataset city — robust against coastal point-in-polygon misses
+  // (a deep-inlet town like Strahan falls outside the simplified country border).
+  const onPickLabel = useMemo(
+    () => (name: string, lng: number, lat: number) => {
+      const id = customPlaceId(name, lng, lat);
+      if (!byIdAll.has(id) && data) {
+        let near: City | null = null;
+        let best = Infinity;
+        for (const c of data.all) {
+          const d = (c.lng - lng) ** 2 + (c.lat - lat) ** 2;
+          if (d < best) {
+            best = d;
+            near = c;
+          }
+        }
+        addPlace({
+          id,
+          en: name,
+          zh: /[一-鿿]/.test(name) ? name : null,
+          country: near?.country ?? '',
+          cc: near?.cc ?? '',
+          ccn: near?.ccn ?? '',
+          cont: near?.cont ?? '',
+          lat,
+          lng,
+          pop: 0,
+          prom: 5,
+          fcode: 'CUSTOM',
+          adm1: 'CUSTOM-' + id,
+        });
+      }
+      add(id);
+    },
+    [byIdAll, data, addPlace, add]
+  );
+
   const selectedSet = useMemo(() => new Set(ids), [ids]);
   const selected = useMemo<City[]>(
-    () => (data ? (ids.map((id) => data.byId.get(id)).filter(Boolean) as City[]) : []),
-    [ids, data]
+    () => (data ? (ids.map((id) => byIdAll.get(id)).filter(Boolean) as City[]) : []),
+    [ids, data, byIdAll]
   );
   const stats = useMemo(() => computeStats(selected), [selected]);
   const newestId = ids.length ? ids[ids.length - 1] : undefined;
 
+  const [focusCc, setFocusCc] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const onShare = async () => {
@@ -130,7 +205,7 @@ export default function App() {
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[380px_1fr]">
         <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto rounded-2xl border border-land-border bg-bg/40 p-4">
           <SearchBox data={data} selected={selectedSet} onAdd={add} />
-          <RecommendationChips data={data} ids={ids} onAdd={add} />
+          <RecommendationChips data={data} ids={ids} onAdd={add} focusCc={focusCc} />
           <SmartExpand data={data} ids={ids} newestId={newestId} onAdd={add} />
           <SelectedCities cities={[...selected].reverse()} onRemove={remove} onClear={clear} />
         </aside>
@@ -139,7 +214,17 @@ export default function App() {
           <div className="absolute left-4 top-4 z-10">
             <StatsBar stats={stats} />
           </div>
-          <MapView cities={selected} theme={theme} />
+          <MapView
+            cities={selected}
+            theme={theme}
+            allCities={data.all}
+            ccnToCc={ccnToCc}
+            countryBounds={countryBounds}
+            onAdd={add}
+            onRemove={remove}
+            onPickLabel={onPickLabel}
+            onFocusCountry={setFocusCc}
+          />
         </section>
       </main>
 

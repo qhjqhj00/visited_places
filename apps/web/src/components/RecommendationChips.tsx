@@ -1,18 +1,33 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { CityData } from '../hooks/useCityData';
-import { recommend, starters } from '../lib/recommend';
+import { recommend, recommendInCountry, starters } from '../lib/recommend';
 
 interface Props {
   data: CityData;
   ids: number[];
   onAdd: (id: number) => void;
+  /** When set, chips are scoped to this country (map drilled into it). */
+  focusCc?: string | null;
 }
 
-export default function RecommendationChips({ data, ids, onAdd }: Props) {
-  const seeds = useMemo(() => starters(data, 12), [data]);
-  const recs = useMemo(
-    () => (ids.length ? recommend(ids, data, 12) : seeds),
-    [ids, data, seeds]
+export default function RecommendationChips({ data, ids, onAdd, focusCc }: Props) {
+  const seeds = useMemo(() => starters(data, 18), [data]);
+
+  // re-roll the random country picks each time you open a (different) country
+  const [seed, setSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  useEffect(() => {
+    if (focusCc) setSeed(Math.floor(Math.random() * 1e9));
+  }, [focusCc]);
+
+  const excludeSet = useMemo(() => new Set(ids), [ids]);
+  const recs = useMemo(() => {
+    if (focusCc) return recommendInCountry(data, focusCc, 30, seed, excludeSet);
+    return ids.length ? recommend(ids, data, 18) : seeds;
+  }, [data, focusCc, seed, excludeSet, ids, seeds]);
+
+  const countryName = useMemo(
+    () => (focusCc ? data.all.find((c) => c.cc === focusCc)?.country ?? '' : ''),
+    [focusCc, data]
   );
 
   if (recs.length === 0) return null;
@@ -20,7 +35,18 @@ export default function RecommendationChips({ data, ids, onAdd }: Props) {
   return (
     <div>
       <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted">
-        {ids.length ? (
+        {focusCc ? (
+          <>
+            <span className="text-accent">📍</span>
+            {countryName ? `${countryName} · ` : ''}热门城市
+            <button
+              onClick={() => setSeed(Math.floor(Math.random() * 1e9))}
+              className="ml-auto rounded-full border border-land-border px-2 py-0.5 text-[11px] text-muted hover:border-accent hover:text-accent"
+            >
+              🎲 换一批
+            </button>
+          </>
+        ) : ids.length ? (
           <>
             <span className="text-accent">⚡</span> 你可能也去过 · 点一下快速添加
           </>
