@@ -44,6 +44,41 @@ app.put('/api/places', async (c) => {
   return c.json({ ok: true, count: places.length });
 });
 
+// ── users (username-only "login"; the name IS the bucket key) ────────────
+const cleanName = (s: unknown) =>
+  String(s ?? '')
+    .trim()
+    .replace(/[^\p{L}\p{N}_-]/gu, '')
+    .slice(0, 24);
+
+app.get('/api/users', (c) => c.json({ users: store.listUsers() }));
+
+app.post('/api/users/rename', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const from = cleanName(body.from);
+  const to = cleanName(body.to);
+  if (!to) return c.json({ error: 'invalid target name' }, 400);
+  store.renameUser(from, to);
+  return c.json({ ok: true });
+});
+
+// ── flown routes (editable: add/delete/edit) ────────────────────────────
+app.get('/api/flights', (c) => {
+  const uid = c.req.header('x-user-id');
+  return c.json({ routes: uid ? store.getFlights(uid) : [] });
+});
+
+app.put('/api/flights', async (c) => {
+  const uid = c.req.header('x-user-id');
+  if (!uid) return c.json({ error: 'missing x-user-id' }, 400);
+  const body = await c.req.json().catch(() => ({}));
+  const routes = (Array.isArray(body.routes) ? body.routes : [])
+    .filter((r: any) => r && Number.isInteger(r.a) && Number.isInteger(r.b) && r.a !== r.b)
+    .map((r: any) => ({ a: r.a, b: r.b, n: Number.isFinite(r.n) && r.n > 0 ? Math.floor(r.n) : 1 }));
+  store.setFlights(uid, routes);
+  return c.json({ ok: true, count: routes.length });
+});
+
 // ── share links ─────────────────────────────────────────────────────────
 app.post('/api/share', async (c) => {
   const body = await c.req.json().catch(() => ({}));

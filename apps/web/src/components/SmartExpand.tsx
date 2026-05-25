@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api, type ExpandCity } from '../lib/api';
 import type { CityData } from '../hooks/useCityData';
+import { useT, cityName } from '../lib/i18n';
 
 interface Props {
   data: CityData;
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function SmartExpand({ data, ids, newestId, onAdd }: Props) {
+  const { t, lang } = useT();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ExpandCity[] | null>(null);
@@ -21,11 +23,11 @@ export default function SmartExpand({ data, ids, newestId, onAdd }: Props) {
   const run = async () => {
     setLoading(true);
     setError(null);
-    setAnchorName(anchor ? anchor.zh || anchor.en : '');
+    setAnchorName(anchor ? cityName(anchor, lang) : '');
     try {
       setResults(await api.expand(newestId, ids));
     } catch {
-      setError('AI 有点忙，点一下重试');
+      setError(t('expand.busy'));
     } finally {
       setLoading(false);
     }
@@ -41,7 +43,7 @@ export default function SmartExpand({ data, ids, newestId, onAdd }: Props) {
         className="flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft/30 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent-soft/60 disabled:opacity-60"
       >
         <span>✨</span>
-        {loading ? 'AI 规划中…（约 10–20 秒）' : '智能扩展 · 让 AI 推荐旅行动线'}
+        {loading ? t('expand.loading') : t('expand.cta')}
       </button>
 
       {error && (
@@ -53,7 +55,7 @@ export default function SmartExpand({ data, ids, newestId, onAdd }: Props) {
       {visible.length > 0 && (
         <div className="mt-2.5">
           <div className="mb-1.5 text-xs text-muted">
-            <span className="text-accent">✨</span> 基于 {anchorName} 的 AI 推荐
+            <span className="text-accent">✨</span> {t('expand.based', anchorName)}
           </div>
           <div className="flex flex-wrap gap-2">
             {visible.map((c) => (
@@ -61,9 +63,9 @@ export default function SmartExpand({ data, ids, newestId, onAdd }: Props) {
                 key={c.id}
                 onClick={() => onAdd(c.id)}
                 className="chip flex items-center gap-1.5 rounded-full border border-accent/30 bg-surface px-3 py-1.5 text-sm text-ink hover:bg-accent-soft/40"
-                title={`${c.en} · ${c.country}`}
+                title={`${cityName(c, lang)} · ${c.country}`}
               >
-                <span>{c.zh || c.en}</span>
+                <span>{cityName(c, lang)}</span>
                 <span className="text-accent opacity-60">+</span>
               </button>
             ))}

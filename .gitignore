@@ -1,3 +1,8 @@
+# ── Personal flight source (raw itinerary incl. ticket numbers) ──────────
+#   Only the derived, sanitized apps/web/public/data/flights.json is committed.
+flight.xls
+flight.jpg
+
 # ── Node / web app ───────────────────────────────────────────
 node_modules/
 apps/web/dist/

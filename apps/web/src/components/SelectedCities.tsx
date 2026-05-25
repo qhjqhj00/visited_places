@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import type { City } from '../types';
+import { useT, cityName } from '../lib/i18n';
+import { countryName } from '../lib/countries';
 
 interface Props {
   cities: City[]; // newest first
@@ -14,6 +16,7 @@ const flag = (cc: string): string =>
     : '🏳️';
 
 export default function SelectedCities({ cities, onRemove, onClear }: Props) {
+  const { t, lang } = useT();
   // Group by country. Iterating newest-first means a country's first-seen city is
   // its newest, so Map insertion order = countries by most-recent activity, and
   // each group's list stays newest-first.
@@ -31,7 +34,9 @@ export default function SelectedCities({ cities, onRemove, onClear }: Props) {
   if (cities.length === 0) {
     return (
       <p className="rounded-2xl border border-dashed border-land-border px-4 py-6 text-center text-sm text-muted">
-        还没有去过的城市。<br />搜索或点上面的推荐开始吧 ✨
+        {t('sel.empty1')}
+        <br />
+        {t('sel.empty2')}
       </p>
     );
   }
@@ -40,10 +45,10 @@ export default function SelectedCities({ cities, onRemove, onClear }: Props) {
     <div>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-xs font-medium text-muted">
-          去过的城市 · {cities.length} · {groups.length} 国
+          {t('sel.header', cities.length, groups.length)}
         </span>
         <button onClick={onClear} className="text-xs text-muted hover:text-accent">
-          清空
+          {t('sel.clear')}
         </button>
       </div>
       <div className="flex flex-col gap-3">
@@ -51,7 +56,7 @@ export default function SelectedCities({ cities, onRemove, onClear }: Props) {
           <div key={g.country} data-testid="country-group">
             <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink/80">
               <span>{flag(g.cc)}</span>
-              <span>{g.country}</span>
+              <span>{countryName(g.cc, g.country, lang)}</span>
               <span className="text-muted">· {g.list.length}</span>
             </div>
             <div className="flex flex-wrap gap-2 border-l border-land-border/60 pl-2.5">
@@ -61,12 +66,12 @@ export default function SelectedCities({ cities, onRemove, onClear }: Props) {
                   data-testid="selected-pill"
                   className="chip group flex items-center gap-1.5 rounded-full bg-accent-soft/40 px-3 py-1.5 text-sm text-ink"
                 >
-                  <span>{c.zh || c.en}</span>
+                  <span>{cityName(c, lang)}</span>
                   <button
                     onClick={() => onRemove(c.id)}
                     className="text-muted hover:text-accent"
-                    title="移除"
-                    aria-label={`移除 ${c.en}`}
+                    title={t('common.remove')}
+                    aria-label={`${t('common.remove')} ${c.en}`}
                   >
                     ×
                   </button>

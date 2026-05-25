@@ -29,6 +29,24 @@ function bboxOf(geom: any): BBox {
   return [a, b, c, d];
 }
 
+// Make a ring's longitudes continuous (no ±180 jump). Antimeridian-spanning
+// countries (Russia, Fiji) otherwise have a ring with points at both +179 and
+// -179, which MapLibre fills as a band straight across the whole map. Walking the
+// ring and keeping each step within 180° of the previous unwraps it (e.g. -170
+// becomes 190) so the fill renders correctly. No-op for normal countries.
+function unwrapRing(ring: number[][]): number[][] {
+  let prev: number | null = null;
+  return ring.map(([lng, lat]) => {
+    let L = lng;
+    if (prev !== null) {
+      while (L - prev > 180) L -= 360;
+      while (L - prev < -180) L += 360;
+    }
+    prev = L;
+    return [L, lat];
+  });
+}
+
 const inBox = (p: Pt, bb: BBox) => p[0] >= bb[0] && p[0] <= bb[2] && p[1] >= bb[1] && p[1] <= bb[3];
 
 function inRing(p: Pt, ring: number[][]): boolean {
@@ -84,8 +102,9 @@ export function loadRegions(): Promise<void> {
     for (const [id, geoms] of byId) {
       const coords: any[] = [];
       for (const g of geoms) {
-        if (g.type === 'Polygon') coords.push(g.coordinates);
-        else if (g.type === 'MultiPolygon') coords.push(...g.coordinates);
+        if (g.type === 'Polygon') coords.push(g.coordinates.map(unwrapRing));
+        else if (g.type === 'MultiPolygon')
+          coords.push(...g.coordinates.map((poly: any) => poly.map(unwrapRing)));
       }
       const geometry = { type: 'MultiPolygon', coordinates: coords };
       countriesById.set(id, { id, geometry, bbox: bboxOf(geometry) });
@@ -95,7 +114,9 @@ export function loadRegions(): Promise<void> {
 }
 
 export function dotR(prom: number): number {
-  return Math.max(4, Math.min(9, 4 + (prom - 3)));
+  // base radius by prominence; kept small so dense regions don't blob together
+  // (the marker layers scale this up with zoom — see mapStyle.addLayers).
+  return Math.max(3, Math.min(6.5, 3 + (prom - 3) * 0.7));
 }
 
 const fc = (features: any[]) => ({ type: 'FeatureCollection', features });
@@ -126,12 +147,35 @@ export interface ViewData {
   markerFC: any;
 }
 
+// Drop the far-flung pieces of a country's polygon that hold none of your visited
+// cities — world-atlas lumps France's overseas departments (French Guiana, Réunion,
+// Guadeloupe…) into the France polygon, so they'd otherwise fill alongside the
+// mainland. Keeps any sub-polygon within ~20° of a visited city in that country.
+function clipToVisited(geom: any, cities: City[]): any {
+  if (geom.type !== 'MultiPolygon' || cities.length === 0) return geom;
+  const DEG = 20;
+  const near = (bb: BBox) =>
+    cities.some((c) => {
+      const dx = c.lng < bb[0] ? bb[0] - c.lng : c.lng > bb[2] ? c.lng - bb[2] : 0;
+      const dy = c.lat < bb[1] ? bb[1] - c.lat : c.lat > bb[3] ? c.lat - bb[3] : 0;
+      return Math.hypot(dx, dy) <= DEG;
+    });
+  const kept = geom.coordinates.filter((poly: any) =>
+    near(bboxOf({ type: 'Polygon', coordinates: poly }))
+  );
+  return kept.length ? { type: 'MultiPolygon', coordinates: kept } : geom;
+}
+
 /** Global: countries filled, one dot per visited province (cc+adm1 group). */
 export function buildGlobal(cities: City[]): ViewData {
   const repByCc = new Map<string, City>();
+  const byCc = new Map<string, City[]>();
   for (const c of cities) {
     const r = repByCc.get(c.cc);
     if (!r || c.prom > r.prom) repByCc.set(c.cc, c);
+    const a = byCc.get(c.cc);
+    if (a) a.push(c);
+    else byCc.set(c.cc, [c]);
   }
   const seen = new Set<string>();
   const regionFeatures: any[] = [];
@@ -139,7 +183,8 @@ export function buildGlobal(cities: City[]): ViewData {
     const poly = countriesById.get(rep.ccn);
     if (poly && !seen.has(poly.id)) {
       seen.add(poly.id);
-      regionFeatures.push({ type: 'Feature', geometry: poly.geometry, properties: { cc } });
+      const geometry = clipToVisited(poly.geometry, byCc.get(cc) ?? []);
+      regionFeatures.push({ type: 'Feature', geometry, properties: { cc } });
     }
   }
   const groups = new Map<string, City>();
