@@ -16,7 +16,7 @@ type Entry = { zh: Val; en: Val };
 
 // One flat dictionary. Values are strings, or functions when they interpolate.
 const STRINGS: Record<string, Entry> = {
-  'app.title': { zh: '我的世界地图', en: 'My World Map' },
+  'app.title': { zh: 'Life Map', en: 'Life Map' },
   'app.subtitle': {
     zh: '选择去过的城市，看着它在地图上长出来',
     en: 'Pick the places you’ve been — watch your map grow',
@@ -122,7 +122,7 @@ const STRINGS: Record<string, Entry> = {
   'theme.apple': { zh: 'Apple', en: 'Apple' },
   'theme.nordic': { zh: '北欧', en: 'Nordic' },
 
-  'poster.watermark': { zh: '我的世界地图 · visited.places', en: 'My World Map · visited.places' },
+  'poster.watermark': { zh: 'Life Map · visited.places', en: 'Life Map · visited.places' },
 };
 
 /** Plain (non-React) lookup so canvas/export code can translate too. */

@@ -1,0 +1,11 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Life Map">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E08560" />
+      <stop offset="1" stop-color="#C2613F" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#g)" />
+  <!-- location pin with a punched-out hole (shows the gradient through) -->
+  <path fill="#fff" fill-rule="evenodd" d="M32 13 a15 15 0 0 1 15 15 c0 10.5 -15 23 -15 23 c0 0 -15 -12.5 -15 -23 a15 15 0 0 1 15 -15 z M32 22.5 a5.5 5.5 0 1 0 0 11 a5.5 5.5 0 1 0 0 -11 z" />
+</svg>

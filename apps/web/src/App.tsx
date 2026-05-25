@@ -248,9 +248,12 @@ export default function App() {
   return (
     <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-4 p-4 md:p-6">
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-ink">{t('app.title')}</h1>
-          <p className="mt-0.5 text-sm text-muted">{t('app.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <img src="/logo.svg" alt="Life Map" className="h-10 w-10 shrink-0" />
+          <div>
+            <h1 className="font-display text-3xl text-ink">{t('app.title')}</h1>
+            <p className="mt-0.5 text-sm text-muted">{t('app.subtitle')}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <UserMenu />
