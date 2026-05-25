@@ -3,6 +3,11 @@
   <h1>Life Map</h1>
   <p><strong>把你去过的城市和飞过的航线，画在一张真正好看的世界地图上。</strong></p>
   <p><a href="README.md">English</a> · <strong>中文</strong></p>
+  <p>
+    <a href="https://github.com/qhjqhj00/LifeMap/actions/workflows/ci.yml"><img src="https://github.com/qhjqhj00/LifeMap/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0" />
+    <img src="https://img.shields.io/badge/node-%E2%89%A518-44883e.svg" alt="Node ≥ 18" />
+  </p>
 </div>
 
 ![Life Map 截图](docs/screenshot-zh.png)
@@ -50,6 +55,16 @@ npm run build           # 构建 apps/web → apps/web/dist
 ./service.sh start      # 构建 web,启动 API + `vite preview`,日志写到 ./logs
 ./service.sh status     # 健康检查 + 地址  |  ./service.sh stop | restart | logs
 ```
+
+### Docker
+
+单容器同时提供 API 和构建好的前端:
+
+```bash
+docker compose up --build      # → http://localhost:8080
+```
+
+数据持久化在 `lifemap-data` 卷里。可选环境变量(MiniMax key、`CORS_ORIGINS`)见 `docker-compose.yml`。公开部署前请先看 [`SECURITY.md`](SECURITY.md)(目前还没有鉴权)。
 
 ## 配置
 

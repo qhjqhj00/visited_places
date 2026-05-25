@@ -1,0 +1,28 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you expected vs. what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to …
+        2. Click …
+        3. See …
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: 'browser + OS, Node version, dev or Docker'
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots / console output (optional)

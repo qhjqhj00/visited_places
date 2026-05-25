@@ -1,0 +1,14 @@
+**/node_modules
+apps/web/dist
+.git
+.github
+logs
+.run
+tools/.cache
+apps/api/data.sqlite*
+apps/api/data.json
+flight.xls
+flight.jpg
+docs
+*.local
+test-results

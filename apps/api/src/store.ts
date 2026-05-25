@@ -10,7 +10,7 @@ import initSqlJs from 'sql.js';
 // as JSON text per row, mirroring the previous store's array-in/array-out shape;
 // normalise into city rows later if querying across maps is ever needed.
 const dir = path.dirname(fileURLToPath(import.meta.url));
-const DB_FILE = path.resolve(dir, '../data.sqlite');
+const DB_FILE = process.env.DB_FILE || path.resolve(dir, '../data.sqlite'); // override for Docker volumes
 const JSON_FILE = path.resolve(dir, '../data.json'); // legacy store, migrated once
 const FLIGHTS_JSON = path.resolve(dir, '../../web/public/data/flights.json'); // seed for uid 0
 const require = createRequire(import.meta.url);

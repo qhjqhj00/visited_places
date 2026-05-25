@@ -1,6 +1,7 @@
 import './env';
 import crypto from 'node:crypto';
 import { serve } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { store, initStore } from './store';
@@ -180,6 +181,15 @@ app.post('/api/expand', async (c) => {
     }));
   return c.json({ cities, cached });
 });
+
+// Production / Docker: serve the built web app from this same server. Set
+// SERVE_STATIC to the dist dir (relative to cwd), e.g. "apps/web/dist". In dev
+// the web is served by Vite, so this stays unset.
+if (process.env.SERVE_STATIC) {
+  const root = process.env.SERVE_STATIC;
+  app.use('/*', serveStatic({ root }));
+  app.get('*', serveStatic({ path: `${root}/index.html` })); // SPA fallback
+}
 
 const port = Number(process.env.PORT) || 3001;
 const hostname = process.env.HOST || '0.0.0.0';

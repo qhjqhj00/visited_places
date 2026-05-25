@@ -3,6 +3,11 @@
   <h1>Life Map</h1>
   <p><strong>Chart the cities you've visited and the routes you've flown — on a map that's actually nice to look at.</strong></p>
   <p><strong>English</strong> · <a href="README.zh-CN.md">中文</a></p>
+  <p>
+    <a href="https://github.com/qhjqhj00/LifeMap/actions/workflows/ci.yml"><img src="https://github.com/qhjqhj00/LifeMap/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+    <img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0" />
+    <img src="https://img.shields.io/badge/node-%E2%89%A518-44883e.svg" alt="Node ≥ 18" />
+  </p>
 </div>
 
 ![Life Map screenshot](docs/screenshot-en.png)
@@ -50,6 +55,18 @@ npm run build           # builds apps/web → apps/web/dist
 ./service.sh start      # builds web, starts API + `vite preview`, logs to ./logs
 ./service.sh status     # health + URLs   |   ./service.sh stop | restart | logs
 ```
+
+### Docker
+
+One container serves both the API and the built web app:
+
+```bash
+docker compose up --build      # → http://localhost:8080
+```
+
+Data persists in the `lifemap-data` volume. Optional env (MiniMax key, `CORS_ORIGINS`)
+is in `docker-compose.yml`. See [`SECURITY.md`](SECURITY.md) before exposing it publicly
+(there's no auth yet).
 
 ## Configuration
 
