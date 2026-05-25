@@ -1,4 +1,5 @@
 import { themes } from '../theme';
+import { useT } from '../lib/i18n';
 
 interface Props {
   value: string;
@@ -6,19 +7,20 @@ interface Props {
 }
 
 export default function ThemeSwitcher({ value, onChange }: Props) {
+  const { t } = useT();
   return (
     <div className="flex gap-1 rounded-full border border-land-border bg-surface p-1">
-      {Object.values(themes).map((t) => (
+      {Object.values(themes).map((theme) => (
         <button
-          key={t.name}
-          onClick={() => onChange(t.name)}
+          key={theme.name}
+          onClick={() => onChange(theme.name)}
           className={`rounded-full px-3 py-1 text-xs transition-colors ${
-            value === t.name
+            value === theme.name
               ? 'bg-accent text-white'
               : 'text-muted hover:text-ink'
           }`}
         >
-          {t.label}
+          {t(`theme.${theme.name}`)}
         </button>
       ))}
     </div>

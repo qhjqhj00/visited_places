@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCityData } from './hooks/useCityData';
 import { useVisited } from './hooks/useVisited';
 import { useCustomPlaces, customPlaceId } from './hooks/useCustomPlaces';
+import { useFlights } from './hooks/useFlights';
+import { arcsFC, nodesFC } from './lib/arcs';
 import { computeStats } from './lib/stats';
 import { api } from './lib/api';
 import { applyTheme, themes } from './theme';
+import { useT } from './lib/i18n';
 import type { City } from './types';
 import SearchBox from './components/SearchBox';
 import RecommendationChips from './components/RecommendationChips';
@@ -14,11 +17,16 @@ import StatsBar from './components/StatsBar';
 import MapView from './components/MapView';
 import ThemeSwitcher from './components/ThemeSwitcher';
 import ExportPanel from './components/ExportPanel';
+import UserMenu from './components/UserMenu';
+import LangSwitcher from './components/LangSwitcher';
+import RoutesPanel from './components/RoutesPanel';
 
 export default function App() {
+  const { t } = useT();
   const { data, error } = useCityData();
   const { ids, add, remove, clear, replace } = useVisited();
   const { places: customPlaces, addPlace } = useCustomPlaces();
+  const { routes: flightRoutes, addRoute, removeRoute, setRouteCount } = useFlights();
 
   const [themeName, setThemeName] = useState<string>(
     () => localStorage.getItem('theme.v1') || 'claude'
@@ -29,7 +37,11 @@ export default function App() {
     localStorage.setItem('theme.v1', theme.name);
   }, [theme]);
 
-  // ── server sync: shared link wins, else restore backup if local is empty ──
+  // ── server sync: a shared link wins; otherwise the server is authoritative ──
+  // for the current user. A fresh browser OR one whose local cache has drifted
+  // (the bug that silently lost the AU/NZ map) converges to the server copy
+  // instead of pushing its stale cache back up. If the server is empty but we
+  // have a local cache, seed the server from it (first run / migration).
   const booted = useRef(false);
   useEffect(() => {
     if (booted.current) return;
@@ -42,8 +54,13 @@ export default function App() {
           window.history.replaceState({}, '', '/');
         })
         .catch(() => {});
-    } else if (ids.length === 0) {
-      api.loadMap().then((srv) => srv.length && replace(srv)).catch(() => {});
+    } else {
+      api.loadMap()
+        .then((srv) => {
+          if (srv.length) replace(srv);
+          else if (ids.length) api.saveMap(ids).catch(() => {});
+        })
+        .catch(() => {});
     }
   }, [ids.length, replace]);
 
@@ -126,17 +143,84 @@ export default function App() {
     [byIdAll, data, addPlace, add]
   );
 
-  const selectedSet = useMemo(() => new Set(ids), [ids]);
+  // Resolve editable {a,b,n} routes to drawable arcs via the city coords; skip any
+  // whose endpoints don't resolve (e.g. a city removed from the dataset).
+  const resolvedRoutes = useMemo(() => {
+    const out = [];
+    for (const r of flightRoutes) {
+      const A = byIdAll.get(r.a);
+      const B = byIdAll.get(r.b);
+      if (A && B) out.push({ a: r.a, b: r.b, n: r.n, from: [A.lng, A.lat] as [number, number], to: [B.lng, B.lat] as [number, number] });
+    }
+    return out;
+  }, [flightRoutes, byIdAll]);
+  const flightCityIds = useMemo(() => {
+    const s = new Set<number>();
+    for (const r of flightRoutes) { s.add(r.a); s.add(r.b); }
+    return [...s];
+  }, [flightRoutes]);
+
+  // "飞过即去过": flight endpoint cities count as visited too. Display-only union
+  // (the saved list stays as-is) so arc endpoints always have a city marker
+  // without destructively rewriting the user's curated map.
+  const effectiveIds = useMemo(() => {
+    if (!flightCityIds.length) return ids;
+    const have = new Set(ids);
+    const extra = flightCityIds.filter((id) => !have.has(id));
+    return extra.length ? [...ids, ...extra] : ids;
+  }, [ids, flightCityIds]);
+  const flightArcs = useMemo(() => arcsFC(resolvedRoutes), [resolvedRoutes]);
+  const flightNodes = useMemo(() => nodesFC(resolvedRoutes), [resolvedRoutes]);
+
+  const selectedSet = useMemo(() => new Set(effectiveIds), [effectiveIds]);
   const selected = useMemo<City[]>(
-    () => (data ? (ids.map((id) => byIdAll.get(id)).filter(Boolean) as City[]) : []),
-    [ids, data, byIdAll]
+    () => (data ? (effectiveIds.map((id) => byIdAll.get(id)).filter(Boolean) as City[]) : []),
+    [effectiveIds, data, byIdAll]
   );
   const stats = useMemo(() => computeStats(selected), [selected]);
   const newestId = ids.length ? ids[ids.length - 1] : undefined;
 
   const [focusCc, setFocusCc] = useState<string | null>(null);
   const [showExport, setShowExport] = useState(false);
+  const [showRoutes, setShowRoutes] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
+
+  // ── draggable sidebar/map split (md+) ──────────────────────────────────
+  const [sidebarW, setSidebarW] = useState(() => {
+    const v = Number(localStorage.getItem('sidebarW.v1'));
+    return v >= 300 && v <= 760 ? v : 380;
+  });
+  const sidebarWRef = useRef(sidebarW);
+  const drag = useRef<{ startX: number; startW: number } | null>(null);
+  useEffect(() => {
+    localStorage.setItem('sidebarW.v1', String(sidebarW));
+  }, [sidebarW]);
+  const onDragMove = useCallback((e: PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const w = Math.max(300, Math.min(d.startW + (e.clientX - d.startX), window.innerWidth - 420));
+    sidebarWRef.current = w;
+    setSidebarW(w);
+  }, []);
+  const onDragEnd = useCallback(() => {
+    drag.current = null;
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+    document.body.style.userSelect = '';
+    document.body.style.cursor = '';
+  }, [onDragMove]);
+  const onDragStart = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      drag.current = { startX: e.clientX, startW: sidebarWRef.current };
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragEnd);
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    },
+    [onDragMove, onDragEnd]
+  );
+
   const onShare = async () => {
     try {
       const code = await api.share(ids);
@@ -151,13 +235,13 @@ export default function App() {
   if (error) {
     return (
       <div className="flex h-full items-center justify-center text-muted">
-        数据加载失败：{error}
+        {t('app.loadError', error)}
       </div>
     );
   }
   if (!data) {
     return (
-      <div className="flex h-full items-center justify-center text-muted">正在加载城市数据…</div>
+      <div className="flex h-full items-center justify-center text-muted">{t('app.loading')}</div>
     );
   }
 
@@ -165,31 +249,39 @@ export default function App() {
     <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-4 p-4 md:p-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-3xl text-ink">我的世界地图</h1>
-          <p className="mt-0.5 text-sm text-muted">选择去过的城市，看着它在地图上长出来</p>
+          <h1 className="font-display text-3xl text-ink">{t('app.title')}</h1>
+          <p className="mt-0.5 text-sm text-muted">{t('app.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
+          <UserMenu />
+          <LangSwitcher />
           <ThemeSwitcher value={themeName} onChange={setThemeName} />
+          <button
+            onClick={() => setShowRoutes(true)}
+            className="rounded-full border border-land-border px-4 py-1.5 text-sm text-ink hover:border-accent"
+          >
+            ✈ {t('app.routes')}
+          </button>
           <button
             onClick={onShare}
             disabled={selected.length === 0}
             className="rounded-full border border-land-border px-4 py-1.5 text-sm text-ink hover:border-accent disabled:opacity-40"
           >
-            分享
+            {t('app.share')}
           </button>
           <button
             onClick={() => setShowExport(true)}
             disabled={selected.length === 0}
             className="rounded-full bg-accent px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
-            导出图片
+            {t('app.export')}
           </button>
         </div>
       </header>
 
       {shareUrl && (
         <div className="flex items-center gap-2 rounded-xl border border-accent/30 bg-accent-soft/30 px-4 py-2 text-sm">
-          <span className="text-muted">已复制分享链接：</span>
+          <span className="text-muted">{t('app.linkCopied')}</span>
           <input
             readOnly
             value={shareUrl}
@@ -202,13 +294,28 @@ export default function App() {
         </div>
       )}
 
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[380px_1fr]">
+      <main
+        className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[var(--sidebar-w)_auto_1fr] md:gap-0"
+        style={{ '--sidebar-w': `${sidebarW}px` } as React.CSSProperties}
+      >
         <aside className="flex min-h-0 flex-col gap-5 overflow-y-auto rounded-2xl border border-land-border bg-bg/40 p-4">
           <SearchBox data={data} selected={selectedSet} onAdd={add} />
-          <RecommendationChips data={data} ids={ids} onAdd={add} focusCc={focusCc} />
-          <SmartExpand data={data} ids={ids} newestId={newestId} onAdd={add} />
+          <RecommendationChips data={data} ids={effectiveIds} onAdd={add} focusCc={focusCc} />
+          <SmartExpand data={data} ids={effectiveIds} newestId={newestId} onAdd={add} />
           <SelectedCities cities={[...selected].reverse()} onRemove={remove} onClear={clear} />
         </aside>
+
+        {/* draggable divider (desktop only) */}
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          title="拖拽调整宽度"
+          onPointerDown={onDragStart}
+          onDoubleClick={() => setSidebarW(380)}
+          className="group hidden cursor-col-resize touch-none items-center justify-center px-2 md:flex"
+        >
+          <div className="h-12 w-1 rounded-full bg-land-border transition-colors group-hover:bg-accent" />
+        </div>
 
         <section className="relative min-h-[320px] overflow-hidden rounded-2xl border border-land-border bg-surface">
           <div className="absolute left-4 top-4 z-10">
@@ -224,6 +331,8 @@ export default function App() {
             onRemove={remove}
             onPickLabel={onPickLabel}
             onFocusCountry={setFocusCc}
+            flightArcs={flightArcs}
+            flightNodes={flightNodes}
           />
         </section>
       </main>
@@ -233,7 +342,21 @@ export default function App() {
           cities={selected}
           stats={stats}
           theme={theme}
+          flightArcs={flightArcs}
+          flightNodes={flightNodes}
           onClose={() => setShowExport(false)}
+        />
+      )}
+
+      {showRoutes && (
+        <RoutesPanel
+          data={data}
+          byId={byIdAll}
+          routes={flightRoutes}
+          onAdd={addRoute}
+          onRemove={removeRoute}
+          onSetCount={setRouteCount}
+          onClose={() => setShowRoutes(false)}
         />
       )}
     </div>

@@ -1,4 +1,5 @@
 import type { Stats } from '../lib/stats';
+import { useT } from '../lib/i18n';
 
 function Stat({ value, label }: { value: string; label: string }) {
   return (
@@ -10,12 +11,13 @@ function Stat({ value, label }: { value: string; label: string }) {
 }
 
 export default function StatsBar({ stats }: { stats: Stats }) {
+  const { t } = useT();
   return (
     <div className="flex gap-6 rounded-2xl border border-land-border bg-surface/80 px-5 py-3 shadow-soft backdrop-blur">
-      <Stat value={String(stats.cities)} label="城市" />
-      <Stat value={String(stats.countries)} label="国家 / 地区" />
-      <Stat value={String(stats.continents)} label="大洲" />
-      <Stat value={`${stats.worldPct}%`} label="世界版图" />
+      <Stat value={String(stats.cities)} label={t('stats.cities')} />
+      <Stat value={String(stats.countries)} label={t('stats.countries')} />
+      <Stat value={String(stats.continents)} label={t('stats.continents')} />
+      <Stat value={`${stats.worldPct}%`} label={t('stats.world')} />
     </div>
   );
 }

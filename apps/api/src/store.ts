@@ -12,6 +12,7 @@ import initSqlJs from 'sql.js';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const DB_FILE = path.resolve(dir, '../data.sqlite');
 const JSON_FILE = path.resolve(dir, '../data.json'); // legacy store, migrated once
+const FLIGHTS_JSON = path.resolve(dir, '../../web/public/data/flights.json'); // seed for uid 0
 const require = createRequire(import.meta.url);
 
 type DB = {
@@ -46,10 +47,22 @@ export async function initStore(): Promise<void> {
     `CREATE TABLE IF NOT EXISTS maps   (uid TEXT PRIMARY KEY, ids TEXT NOT NULL);
      CREATE TABLE IF NOT EXISTS shares (code TEXT PRIMARY KEY, ids TEXT NOT NULL);
      CREATE TABLE IF NOT EXISTS cache  (anchor INTEGER PRIMARY KEY, ids TEXT NOT NULL);
-     CREATE TABLE IF NOT EXISTS places (uid TEXT PRIMARY KEY, json TEXT NOT NULL);`
+     CREATE TABLE IF NOT EXISTS places (uid TEXT PRIMARY KEY, json TEXT NOT NULL);
+     CREATE TABLE IF NOT EXISTS flights(uid TEXT PRIMARY KEY, json TEXT NOT NULL);`
   );
   const empty = !db.exec('SELECT 1 FROM maps LIMIT 1').length;
   if (empty && fs.existsSync(JSON_FILE)) migrateFromJson();
+  // seed uid "0" flights from the bundled dataset (tommy's flown routes) once
+  if (!db.exec("SELECT 1 FROM flights WHERE uid='0'").length && fs.existsSync(FLIGHTS_JSON)) {
+    try {
+      const fj = JSON.parse(fs.readFileSync(FLIGHTS_JSON, 'utf8'));
+      const routes = (fj.routes ?? []).map((r: any) => ({ a: r.a, b: r.b, n: r.n }));
+      store.setFlights('0', routes);
+      console.log(`seeded userid "0" flights with ${routes.length} routes`);
+    } catch {
+      /* best effort */
+    }
+  }
   persist();
 }
 
@@ -96,6 +109,45 @@ export const store = {
   },
   setPlaces: (uid: string, places: unknown[]) => {
     db.run('INSERT OR REPLACE INTO places (uid, json) VALUES (?, ?)', [uid, JSON.stringify(places)]);
+    persist();
+  },
+  // flown routes [{a,b,n}] (city-id pairs + times flown); editable per user
+  getFlights: (uid: string): unknown[] => {
+    const r = db.exec('SELECT json FROM flights WHERE uid=?', [uid]);
+    return r.length ? (JSON.parse(r[0].values[0][0] as string) as unknown[]) : [];
+  },
+  setFlights: (uid: string, routes: unknown[]) => {
+    db.run('INSERT OR REPLACE INTO flights (uid, json) VALUES (?, ?)', [uid, JSON.stringify(routes)]);
+    persist();
+  },
+  // Known users = whoever has a map row. Powers the user picker so a name created
+  // on one browser is discoverable on another (username-only, no auth).
+  listUsers: (): { uid: string; count: number }[] => {
+    const r = db.exec('SELECT uid, ids FROM maps');
+    if (!r.length) return [];
+    return r[0].values.map((row) => {
+      let count = 0;
+      try {
+        count = (JSON.parse(row[1] as string) as unknown[]).length;
+      } catch {
+        /* leave 0 */
+      }
+      return { uid: row[0] as string, count };
+    });
+  },
+  // Move a user's map + custom places to a new name (claim the default bucket).
+  renameUser: (from: string, to: string) => {
+    if (from === to) return;
+    const m = db.exec('SELECT ids FROM maps WHERE uid=?', [from]);
+    if (m.length) {
+      db.run('INSERT OR REPLACE INTO maps (uid, ids) VALUES (?, ?)', [to, m[0].values[0][0]]);
+      db.run('DELETE FROM maps WHERE uid=?', [from]);
+    }
+    const p = db.exec('SELECT json FROM places WHERE uid=?', [from]);
+    if (p.length) {
+      db.run('INSERT OR REPLACE INTO places (uid, json) VALUES (?, ?)', [to, p[0].values[0][0]]);
+      db.run('DELETE FROM places WHERE uid=?', [from]);
+    }
     persist();
   },
 };

@@ -1,8 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { City } from '../types';
-import { api } from '../lib/api';
+import { api, getUserId } from '../lib/api';
 
-const KEY = 'customPlaces.v1';
+// Per-user cache key (see useVisited) with one-time adoption of the old global key.
+const uid = getUserId();
+const KEY = `customPlaces.v1:${uid}`;
+const LEGACY_KEY = 'customPlaces.v1';
+
+function initialPlaces(): City[] {
+  try {
+    let raw = localStorage.getItem(KEY);
+    if (raw === null && uid === '0') {
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      if (legacy !== null) {
+        localStorage.setItem(KEY, legacy);
+        localStorage.removeItem(LEGACY_KEY);
+        raw = legacy;
+      }
+    }
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? (parsed as City[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 function mergeById(a: City[], b: City[]): City[] {
   const have = new Set(a.map((p) => p.id));
@@ -18,14 +39,7 @@ function mergeById(a: City[], b: City[]): City[] {
  * in a saved map resolve on any browser, not just the one that created them.
  */
 export function useCustomPlaces() {
-  const [places, setPlaces] = useState<City[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem(KEY) || '[]');
-      return Array.isArray(raw) ? (raw as City[]) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [places, setPlaces] = useState<City[]>(initialPlaces);
   const [synced, setSynced] = useState(false);
 
   useEffect(() => {

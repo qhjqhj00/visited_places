@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react';
 import type { CityData } from '../hooks/useCityData';
 import type { City } from '../types';
+import { useT, cityName } from '../lib/i18n';
+import { countryName } from '../lib/countries';
 
 interface Props {
   data: CityData;
@@ -9,6 +11,7 @@ interface Props {
 }
 
 export default function SearchBox({ data, selected, onAdd }: Props) {
+  const { t, lang } = useT();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +68,7 @@ export default function SearchBox({ data, selected, onAdd }: Props) {
             setActive(0);
           }}
           onKeyDown={onKey}
-          placeholder="搜索城市，中英文都行 — 试试「札幌」或「Suzhou」"
+          placeholder={t('search.placeholder')}
           className="w-full bg-transparent text-[15px] text-ink outline-none placeholder:text-muted/70"
           autoFocus
         />
@@ -87,10 +90,12 @@ export default function SearchBox({ data, selected, onAdd }: Props) {
                 }`}
               >
                 <span className="flex items-baseline gap-2">
-                  <span className="text-[15px] text-ink">{c.zh || c.en}</span>
-                  {c.zh && <span className="text-xs text-muted">{c.en}</span>}
+                  <span className="text-[15px] text-ink">{cityName(c, lang)}</span>
+                  {(lang === 'zh' ? c.zh && c.en : c.zh && c.zh !== c.en) && (
+                    <span className="text-xs text-muted">{lang === 'zh' ? c.en : c.zh}</span>
+                  )}
                 </span>
-                <span className="text-xs text-muted">{c.country}</span>
+                <span className="text-xs text-muted">{countryName(c.cc, c.country, lang)}</span>
               </button>
             </li>
           ))}

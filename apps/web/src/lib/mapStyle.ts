@@ -87,12 +87,25 @@ export function addLayers(map: maplibregl.Map, theme: Theme, data: ViewData, hit
       paint: { 'text-color': c.muted, 'text-halo-color': c.water, 'text-halo-width': 1.2 },
     });
   }
+  // Radius scales with zoom: compact at world view (so dense regions stay tidy),
+  // growing as you zoom in. `r` is the per-city base radius (by prominence).
+  const dotRadius = [
+    'interpolate', ['linear'], ['zoom'],
+    1.5, ['*', ['get', 'r'], 0.5],
+    4, ['*', ['get', 'r'], 0.85],
+    8, ['*', ['get', 'r'], 1.3],
+  ] as any;
   if (!map.getLayer('marker-glow')) {
     map.addLayer({
       id: 'marker-glow',
       type: 'circle',
       source: 'markers',
-      paint: { 'circle-radius': ['*', ['get', 'r'], 2.2], 'circle-color': c.dot, 'circle-blur': 1, 'circle-opacity': 0.3 },
+      paint: {
+        'circle-radius': ['*', dotRadius, 1.7] as any,
+        'circle-color': c.dot,
+        'circle-blur': 1,
+        'circle-opacity': ['interpolate', ['linear'], ['zoom'], 1.5, 0.12, 6, 0.28] as any,
+      },
     });
   }
   if (!map.getLayer('marker-dot')) {
@@ -100,7 +113,13 @@ export function addLayers(map: maplibregl.Map, theme: Theme, data: ViewData, hit
       id: 'marker-dot',
       type: 'circle',
       source: 'markers',
-      paint: { 'circle-radius': ['get', 'r'], 'circle-color': c.dot, 'circle-stroke-color': c.surface, 'circle-stroke-width': 2 },
+      paint: {
+        'circle-radius': dotRadius,
+        'circle-color': c.dot,
+        'circle-stroke-color': c.surface,
+        'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 1.5, 0.6, 5, 1.5] as any,
+        'circle-opacity': 0.9,
+      },
     });
   }
   if (!map.getLayer('marker-label')) {
@@ -119,6 +138,138 @@ export function addLayers(map: maplibregl.Map, theme: Theme, data: ViewData, hit
       paint: { 'text-color': c.ink, 'text-halo-color': c.water, 'text-halo-width': 1.5 },
     });
   }
+}
+
+// Localized name expressions for the basemap's own label layers. OpenFreeMap
+// serves CJK glyphs for every Noto fontstack (Regular/Bold/Italic), so this is
+// tofu-free. zh prefers the Chinese exonym, then the local script, then latin.
+const NAME_EXPR_ZH: any = [
+  'coalesce',
+  ['get', 'name:zh'],
+  ['get', 'name:zh-Hans'],
+  ['get', 'name:nonlatin'],
+  ['get', 'name:latin'],
+  ['get', 'name_en'],
+  ['get', 'name'],
+];
+const NAME_EXPR_EN: any = [
+  'coalesce',
+  ['get', 'name:en'],
+  ['get', 'name_en'],
+  ['get', 'name:latin'],
+  ['get', 'name'],
+];
+
+/** Switch every place label (basemap + our city overlays) to zh or en. Safe to
+ * call repeatedly; skips road shields (numeric refs) and missing layers. */
+export function setLabelLang(map: maplibregl.Map, lang: 'zh' | 'en'): void {
+  const nameExpr = lang === 'zh' ? NAME_EXPR_ZH : NAME_EXPR_EN;
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type !== 'symbol' || l.id === 'marker-label' || l.id === 'candidate-label') continue;
+    const tf = (l as any).layout?.['text-field'];
+    if (!tf) continue;
+    const s = JSON.stringify(tf);
+    if (!s.includes('name') || s.includes('"ref"')) continue; // skip shields / non-name labels
+    try {
+      map.setLayoutProperty(l.id, 'text-field', nameExpr);
+    } catch {
+      /* layer differs between style versions */
+    }
+  }
+  // our overlay features carry { label: en, zh } where zh is '' when unknown
+  const overlayExpr: any =
+    lang === 'zh'
+      ? ['case', ['!=', ['get', 'zh'], ''], ['get', 'zh'], ['get', 'label']]
+      : ['get', 'label'];
+  for (const id of ['marker-label', 'candidate-label']) {
+    if (map.getLayer(id)) {
+      try {
+        map.setLayoutProperty(id, 'text-field', overlayExpr);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+export type FlightMode = 'both' | 'cities' | 'routes';
+
+const CITY_LAYERS = [
+  'region-fill', 'region-outline', 'marker-glow', 'marker-dot', 'marker-label',
+  'candidate-dot', 'candidate-label',
+];
+const ARC_LAYERS = ['arc-glow', 'arc-line'];
+
+/** Add the flight arcs (glowing great-circle lines) + endpoint dots. Arcs sit
+ * above region fills but below the city markers so dots stay readable. */
+export function addFlightLayers(map: maplibregl.Map, theme: Theme, arcFC: any, nodeFC: any): void {
+  const c = theme.colors;
+  if (!map.getSource('arcs')) map.addSource('arcs', { type: 'geojson', data: arcFC });
+  if (!map.getSource('flight-nodes')) map.addSource('flight-nodes', { type: 'geojson', data: nodeFC });
+
+  const before = map.getLayer('marker-glow') ? 'marker-glow' : undefined;
+  // width/opacity grow with how often a route was flown (n)
+  const widthByN = ['interpolate', ['linear'], ['get', 'n'], 1, 0.6, 4, 1.4, 20, 3, 60, 5] as any;
+  if (!map.getLayer('arc-glow')) {
+    map.addLayer({
+      id: 'arc-glow', type: 'line', source: 'arcs',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': c.accent,
+        'line-width': ['*', widthByN, 3] as any,
+        'line-opacity': 0.18,
+        'line-blur': 6,
+      },
+    }, before);
+  }
+  if (!map.getLayer('arc-line')) {
+    map.addLayer({
+      id: 'arc-line', type: 'line', source: 'arcs',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        'line-color': c.accent,
+        'line-width': widthByN,
+        'line-opacity': ['interpolate', ['linear'], ['get', 'n'], 1, 0.5, 20, 0.85] as any,
+      },
+    }, before);
+  }
+  if (!map.getLayer('flight-node')) {
+    map.addLayer({
+      id: 'flight-node', type: 'circle', source: 'flight-nodes',
+      paint: {
+        'circle-radius': 2.6,
+        'circle-color': c.dot,
+        'circle-stroke-color': c.surface,
+        'circle-stroke-width': 1,
+        'circle-opacity': 0.95,
+      },
+    });
+  }
+}
+
+export function setArcs(map: maplibregl.Map, arcFC: any, nodeFC: any): void {
+  (map.getSource('arcs') as maplibregl.GeoJSONSource | undefined)?.setData(arcFC);
+  (map.getSource('flight-nodes') as maplibregl.GeoJSONSource | undefined)?.setData(nodeFC);
+}
+
+export function recolorArcs(map: maplibregl.Map, theme: Theme): void {
+  const c = theme.colors;
+  for (const id of ARC_LAYERS) if (map.getLayer(id)) map.setPaintProperty(id, 'line-color', c.accent);
+  if (map.getLayer('flight-node')) {
+    map.setPaintProperty('flight-node', 'circle-color', c.dot);
+    map.setPaintProperty('flight-node', 'circle-stroke-color', c.surface);
+  }
+}
+
+/** Show/hide the city vs route layer groups for the 3-way view toggle. */
+export function setFlightView(map: maplibregl.Map, mode: FlightMode): void {
+  const vis = (id: string, on: boolean) => {
+    if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+  };
+  for (const id of CITY_LAYERS) vis(id, mode !== 'routes');
+  for (const id of ARC_LAYERS) vis(id, mode !== 'cities');
+  // endpoint dots only when the full city markers are hidden (routes-only view)
+  vis('flight-node', mode === 'routes');
 }
 
 export function setViewData(map: maplibregl.Map, data: ViewData): void {

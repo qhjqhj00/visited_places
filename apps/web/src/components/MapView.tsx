@@ -8,8 +8,14 @@ import {
   recolorBase,
   recolorVisited,
   setCandidates,
+  setLabelLang,
   setMarkers,
   setViewData,
+  addFlightLayers,
+  setArcs,
+  recolorArcs,
+  setFlightView,
+  type FlightMode,
 } from '../lib/mapStyle';
 import {
   allCountriesFC,
@@ -22,6 +28,8 @@ import {
 } from '../lib/regions';
 import type { Theme } from '../theme';
 import type { City } from '../types';
+import { useT } from '../lib/i18n';
+import { countryName } from '../lib/countries';
 
 type View = { level: 'global' } | { level: 'country'; cc: string };
 
@@ -45,6 +53,9 @@ interface Props {
   onPickLabel: (name: string, lng: number, lat: number) => void;
   /** Fires with the drilled-into country code (or null at the global view). */
   onFocusCountry?: (cc: string | null) => void;
+  /** Flown-route great-circle arcs + endpoint dots (FeatureCollections). */
+  flightArcs?: any;
+  flightNodes?: any;
 }
 
 // basemap (OpenMapTiles) settlement label classes we let users tap to add
@@ -60,7 +71,12 @@ export default function MapView({
   onRemove,
   onPickLabel,
   onFocusCountry,
+  flightArcs,
+  flightNodes,
 }: Props) {
+  const { t, lang } = useT();
+  const [flightMode, setFlightMode] = useState<FlightMode>('both');
+  const hasFlights = (flightArcs?.features?.length ?? 0) > 0;
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const ready = useRef(false); // map loaded + regions loaded + layers added
@@ -72,8 +88,8 @@ export default function MapView({
   const [selectMode, setSelectMode] = useState(false);
   const viewRef = useRef(view);
   viewRef.current = view;
-  const latest = useRef({ cities, theme, ccnToCc, allCities, onAdd, onRemove, onPickLabel });
-  latest.current = { cities, theme, ccnToCc, allCities, onAdd, onRemove, onPickLabel };
+  const latest = useRef({ cities, theme, ccnToCc, allCities, onAdd, onRemove, onPickLabel, lang, flightArcs, flightNodes, flightMode });
+  latest.current = { cities, theme, ccnToCc, allCities, onAdd, onRemove, onPickLabel, lang, flightArcs, flightNodes, flightMode };
 
   // init once
   useEffect(() => {
@@ -231,6 +247,10 @@ export default function MapView({
       loadRegions().then(() => {
         const d = buildGlobal(latest.current.cities);
         addLayers(map, latest.current.theme, d, allCountriesFC(latest.current.ccnToCc));
+        setLabelLang(map, latest.current.lang);
+        const empty = { type: 'FeatureCollection', features: [] };
+        addFlightLayers(map, latest.current.theme, latest.current.flightArcs ?? empty, latest.current.flightNodes ?? empty);
+        setFlightView(map, latest.current.flightMode);
         baseData.current = d;
         fitData(map, d, { duration: 0 });
         ready.current = true;
@@ -274,19 +294,58 @@ export default function MapView({
     if (!map || !ready.current) return;
     recolorBase(map, theme);
     recolorVisited(map, theme);
+    recolorArcs(map, theme);
   }, [theme]);
+
+  // language changed → relabel basemap + overlay place labels
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready.current) return;
+    setLabelLang(map, lang);
+  }, [lang]);
+
+  // flight data arrived / changed → update arc + node sources
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready.current || !flightArcs) return;
+    setArcs(map, flightArcs, flightNodes ?? { type: 'FeatureCollection', features: [] });
+  }, [flightArcs, flightNodes]);
+
+  // view-mode toggle → show/hide city vs route layers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready.current) return;
+    setFlightView(map, flightMode);
+  }, [flightMode]);
 
   // tell the parent which country is focused (drives country-scoped recs)
   useEffect(() => {
     onFocusCountry?.(view.level === 'country' ? view.cc : null);
   }, [view, onFocusCountry]);
 
-  const countryName =
-    view.level === 'country' ? cities.find((c) => c.cc === view.cc)?.country ?? '' : '';
+  const focusCountry =
+    view.level === 'country'
+      ? countryName(view.cc, allCities.find((c) => c.cc === view.cc)?.country ?? '', lang)
+      : '';
 
   return (
     <div className="relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" />
+      {hasFlights && (
+        <div className="absolute right-3 top-3 z-10 flex gap-1 rounded-full border border-land-border bg-surface/90 p-1 shadow-soft backdrop-blur">
+          {(['both', 'cities', 'routes'] as FlightMode[]).map((m) => (
+            <button
+              key={m}
+              onClick={() => setFlightMode(m)}
+              className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
+                flightMode === m ? 'bg-accent text-white' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {t(`flight.${m}`)}
+            </button>
+          ))}
+        </div>
+      )}
       {view.level === 'country' && (
         <button
           onClick={() => {
@@ -295,12 +354,12 @@ export default function MapView({
           }}
           className="absolute left-3 top-3 z-10 rounded-full border border-land-border bg-surface/90 px-3 py-1.5 text-xs text-ink shadow-soft backdrop-blur hover:border-accent"
         >
-          ← 返回世界{countryName ? ` · ${countryName}` : ''}
+          ← {t('map.back')}{focusCountry ? ` · ${focusCountry}` : ''}
         </button>
       )}
       {selectMode && (
         <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-land-border bg-surface/90 px-3 py-1 text-xs text-muted shadow-soft backdrop-blur">
-          ◦ 点空心圈或地名添加 · 点已选取消
+          {t('map.selectHint')}
         </div>
       )}
     </div>

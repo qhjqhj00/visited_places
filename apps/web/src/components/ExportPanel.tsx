@@ -1,20 +1,27 @@
 import { useEffect, useState } from 'react';
 import { ASPECTS, renderPoster, type AspectKey } from '../lib/exportMap';
+import type { FlightMode } from '../lib/mapStyle';
 import { downloadBlob } from '../lib/exportImage';
 import type { Stats } from '../lib/stats';
 import type { Theme } from '../theme';
 import type { City } from '../types';
+import { useT } from '../lib/i18n';
 
 interface Props {
   cities: City[];
   stats: Stats;
   theme: Theme;
+  flightArcs?: any;
+  flightNodes?: any;
   onClose: () => void;
 }
 
-export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
+export default function ExportPanel({ cities, stats, theme, flightArcs, flightNodes, onClose }: Props) {
+  const { t, lang } = useT();
+  const hasFlights = (flightArcs?.features?.length ?? 0) > 0;
   const [aspect, setAspect] = useState<AspectKey>('square');
-  const [title, setTitle] = useState('我的世界地图');
+  const [mode, setMode] = useState<FlightMode>(hasFlights ? 'both' : 'cities');
+  const [title, setTitle] = useState(() => t('app.title'));
   const [handle, setHandle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -27,7 +34,7 @@ export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
       return null;
     });
     setError(false);
-  }, [aspect, title, handle, theme, cities]);
+  }, [aspect, mode, title, handle, theme, cities, lang]);
 
   // revoke on unmount
   useEffect(() => () => setPreview((p) => (p && URL.revokeObjectURL(p.url), null)), []);
@@ -36,7 +43,7 @@ export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
     setBusy(true);
     setError(false);
     try {
-      const blob = await renderPoster({ cities, stats, theme, title, handle, aspect });
+      const blob = await renderPoster({ cities, stats, theme, title, handle, aspect, lang, mode, flightArcs, flightNodes });
       setPreview({ url: URL.createObjectURL(blob), blob });
     } catch {
       setError(true);
@@ -53,24 +60,24 @@ export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
       >
         <div className="flex flex-1 items-center justify-center rounded-xl border border-land-border bg-bg/40 p-3">
           {preview ? (
-            <img src={preview.url} alt="预览" className="max-h-[60vh] w-auto rounded" />
+            <img src={preview.url} alt={t('export.preview')} className="max-h-[60vh] w-auto rounded" />
           ) : (
             <div className="px-6 py-16 text-center text-sm text-muted">
-              {busy ? '正在渲染地图…' : error ? '渲染失败，重试一下' : '点「生成预览」看效果'}
+              {busy ? t('export.rendering') : error ? t('export.renderFail') : t('export.hint')}
             </div>
           )}
         </div>
 
         <div className="flex w-full shrink-0 flex-col gap-4 md:w-60">
           <div className="flex items-center justify-between">
-            <h2 className="font-display text-lg text-ink">导出图片</h2>
-            <button onClick={onClose} className="text-muted hover:text-accent" aria-label="关闭">
+            <h2 className="font-display text-lg text-ink">{t('export.title')}</h2>
+            <button onClick={onClose} className="text-muted hover:text-accent" aria-label={t('common.close')}>
               ×
             </button>
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs text-muted">尺寸</label>
+            <label className="mb-1.5 block text-xs text-muted">{t('export.size')}</label>
             <div className="flex gap-1 rounded-full border border-land-border p-1">
               {(Object.keys(ASPECTS) as AspectKey[]).map((k) => (
                 <button
@@ -80,14 +87,33 @@ export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
                     aspect === k ? 'bg-accent text-white' : 'text-muted hover:text-ink'
                   }`}
                 >
-                  {ASPECTS[k].label}
+                  {ASPECTS[k].ratio} {t(`aspect.${k}`)}
                 </button>
               ))}
             </div>
           </div>
 
+          {hasFlights && (
+            <div>
+              <label className="mb-1.5 block text-xs text-muted">{t('export.content')}</label>
+              <div className="flex gap-1 rounded-full border border-land-border p-1">
+                {(['both', 'cities', 'routes'] as FlightMode[]).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMode(m)}
+                    className={`flex-1 rounded-full px-2 py-1 text-xs transition-colors ${
+                      mode === m ? 'bg-accent text-white' : 'text-muted hover:text-ink'
+                    }`}
+                  >
+                    {t(`flight.${m}`)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
-            <label className="mb-1.5 block text-xs text-muted">标题</label>
+            <label className="mb-1.5 block text-xs text-muted">{t('export.titleLabel')}</label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -96,7 +122,7 @@ export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
           </div>
 
           <div>
-            <label className="mb-1.5 block text-xs text-muted">社媒账号</label>
+            <label className="mb-1.5 block text-xs text-muted">{t('export.handle')}</label>
             <input
               value={handle}
               onChange={(e) => setHandle(e.target.value)}
@@ -112,14 +138,14 @@ export default function ExportPanel({ cities, stats, theme, onClose }: Props) {
                 disabled={busy}
                 className="rounded-full bg-accent px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
               >
-                {busy ? '渲染中…' : '生成预览'}
+                {busy ? t('export.renderingShort') : t('export.generate')}
               </button>
             ) : (
               <button
                 onClick={() => downloadBlob(preview.blob, `my-world-${aspect}.png`)}
                 className="rounded-full bg-accent px-4 py-2.5 text-sm font-medium text-white"
               >
-                下载 PNG
+                {t('export.download')}
               </button>
             )}
           </div>
