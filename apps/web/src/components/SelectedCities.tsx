@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { City } from '../types';
-import { useT, cityName } from '../lib/i18n';
+import { useT, cityName, type Lang } from '../lib/i18n';
 import { countryName } from '../lib/countries';
 
 interface Props {
@@ -9,11 +9,22 @@ interface Props {
   onClear: () => void;
 }
 
-// 2-letter country code → flag emoji (regional indicator symbols)
-const flag = (cc: string): string =>
-  /^[A-Za-z]{2}$/.test(cc)
-    ? String.fromCodePoint(...[...cc.toUpperCase()].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65))
+// 2-letter country code → flag emoji (regional indicator symbols).
+// Taiwan shows the PRC flag (中国台湾).
+const flag = (cc: string): string => {
+  const code = cc === 'TW' ? 'CN' : cc;
+  return /^[A-Za-z]{2}$/.test(code)
+    ? String.fromCodePoint(...[...code.toUpperCase()].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65))
     : '🏳️';
+};
+
+// Taiwan / Hong Kong / Macao are labeled as part of China (matching the map fill).
+const CHINA_PARTS = new Set(['TW', 'HK', 'MO']);
+const groupLabel = (cc: string, country: string, lang: Lang): string => {
+  const base = countryName(cc, country, lang);
+  if (!CHINA_PARTS.has(cc)) return base;
+  return lang === 'zh' ? `中国${base}` : `${base}, China`;
+};
 
 export default function SelectedCities({ cities, onRemove, onClear }: Props) {
   const { t, lang } = useT();
@@ -56,7 +67,7 @@ export default function SelectedCities({ cities, onRemove, onClear }: Props) {
           <div key={g.country} data-testid="country-group">
             <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink/80">
               <span>{flag(g.cc)}</span>
-              <span>{countryName(g.cc, g.country, lang)}</span>
+              <span>{groupLabel(g.cc, g.country, lang)}</span>
               <span className="text-muted">· {g.list.length}</span>
             </div>
             <div className="flex flex-wrap gap-2 border-l border-land-border/60 pl-2.5">
