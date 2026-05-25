@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ASPECTS, renderPoster, type AspectKey } from '../lib/exportMap';
+import { ASPECTS, TEMPLATES, renderPoster, type AspectKey, type TemplateKey } from '../lib/exportMap';
 import type { FlightMode } from '../lib/mapStyle';
 import { downloadBlob } from '../lib/exportImage';
 import type { Stats } from '../lib/stats';
@@ -20,6 +20,7 @@ export default function ExportPanel({ cities, stats, theme, flightArcs, flightNo
   const { t, lang } = useT();
   const hasFlights = (flightArcs?.features?.length ?? 0) > 0;
   const [aspect, setAspect] = useState<AspectKey>('square');
+  const [template, setTemplate] = useState<TemplateKey>('card');
   const [mode, setMode] = useState<FlightMode>(hasFlights ? 'both' : 'cities');
   const [title, setTitle] = useState(() => t('app.title'));
   const [handle, setHandle] = useState('');
@@ -34,7 +35,7 @@ export default function ExportPanel({ cities, stats, theme, flightArcs, flightNo
       return null;
     });
     setError(false);
-  }, [aspect, mode, title, handle, theme, cities, lang]);
+  }, [aspect, template, mode, title, handle, theme, cities, lang]);
 
   // revoke on unmount
   useEffect(() => () => setPreview((p) => (p && URL.revokeObjectURL(p.url), null)), []);
@@ -43,7 +44,7 @@ export default function ExportPanel({ cities, stats, theme, flightArcs, flightNo
     setBusy(true);
     setError(false);
     try {
-      const blob = await renderPoster({ cities, stats, theme, title, handle, aspect, lang, mode, flightArcs, flightNodes });
+      const blob = await renderPoster({ cities, stats, theme, title, handle, aspect, template, lang, mode, flightArcs, flightNodes });
       setPreview({ url: URL.createObjectURL(blob), blob });
     } catch {
       setError(true);
@@ -74,6 +75,23 @@ export default function ExportPanel({ cities, stats, theme, flightArcs, flightNo
             <button onClick={onClose} className="text-muted hover:text-accent" aria-label={t('common.close')}>
               ×
             </button>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs text-muted">{t('export.style')}</label>
+            <div className="grid grid-cols-4 gap-1 rounded-2xl border border-land-border p-1">
+              {TEMPLATES.map((k) => (
+                <button
+                  key={k}
+                  onClick={() => setTemplate(k)}
+                  className={`rounded-xl px-2 py-1 text-xs transition-colors ${
+                    template === k ? 'bg-accent text-white' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {t(`tpl.${k}`)}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div>
