@@ -20,6 +20,15 @@ export function recolorBase(map: maplibregl.Map, theme: Theme): void {
   set('background', 'background-color', c.land);
   set('water', 'fill-color', c.water);
   for (const b of ['boundary_2', 'boundary_3', 'boundary_disputed']) set(b, 'line-color', c.landBorder);
+  // Recolor the basemap place labels to the theme so they stay readable on dark
+  // themes (positron's defaults are dark text on a light halo).
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type !== 'symbol') continue;
+    const tf = (l as any).layout?.['text-field'];
+    if (!tf || !JSON.stringify(tf).includes('name')) continue;
+    set(l.id, 'text-color', c.ink);
+    set(l.id, 'text-halo-color', c.water);
+  }
 }
 
 /** Region fill+outline (below basemap labels) and marker glow/dot/label (on top).

@@ -121,6 +121,9 @@ const STRINGS: Record<string, Entry> = {
   'theme.claude': { zh: 'Claude', en: 'Claude' },
   'theme.apple': { zh: 'Apple', en: 'Apple' },
   'theme.nordic': { zh: '北欧', en: 'Nordic' },
+  'theme.midnight': { zh: '午夜', en: 'Midnight' },
+  'theme.mono': { zh: '极简', en: 'Mono' },
+  'theme.sand': { zh: '暖沙', en: 'Sand' },
 
   'poster.watermark': { zh: 'Life Map · visited.places', en: 'Life Map · visited.places' },
 };
