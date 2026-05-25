@@ -2,15 +2,16 @@
   <img src="apps/web/public/logo.svg" width="72" height="72" alt="Life Map logo" />
   <h1>Life Map</h1>
   <p><strong>Chart the cities you've visited and the routes you've flown — on a map that's actually nice to look at.</strong></p>
+  <p><strong>English</strong> · <a href="README.zh-CN.md">中文</a></p>
 </div>
 
-![Life Map screenshot](docs/screenshot.png)
+![Life Map screenshot](docs/screenshot-en.png)
 
 Most "places I've been" tools are a list plus an ugly shaded map. Life Map aims to be the opposite: a tasteful, interactive world map where adding a city feels like autocomplete-with-momentum, your flights render as glowing great-circle arcs, and the result is a shareable poster.
 
 ## Features
 
-- **Two-level world map** (MapLibre GL + OpenFreeMap vector tiles) — countries fill in; drill into a country to see its provinces and every city. Pan/zoom, multiple themes.
+- **Two-level world map** (MapLibre GL + OpenFreeMap vector tiles) — countries fill in; drill into a country to see its provinces and every city. Pan/zoom, multiple themes (incl. a dark "Midnight").
 - **Flight map** — import your flight history and see every route as a great-circle arc (à la 航旅纵横). Toggle **cities + routes / cities only / routes only**, on screen and in the export.
 - **Smart adding** — fuzzy bilingual search, instant local neighbor recommendations (precomputed), and an optional LLM "smart expand" for route/theme ideas.
 - **Bilingual (中 / EN)** — every label switches, including the basemap place names and country names.
