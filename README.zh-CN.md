@@ -97,6 +97,10 @@ service.sh  开发/生产进程管理
 - sql.js 每次写入都重写整个 DB 文件——个人规模够用;多用户场景建议换 `better-sqlite3` / `node:sqlite`。
 - 部分 GeoNames 中文地名质量不均;移动端打磨和无障碍仍有提升空间。
 
+## 免责声明
+
+地图瓦片、边界与地名均来自公开开放数据(OpenFreeMap、Natural Earth / world-atlas、GeoNames、OpenFlights)。所呈现的边界、名称与归类沿用上述数据源及本应用的展示设定,不代表任何政治或领土立场,本项目亦不对由此产生的任何地缘问题承担责任。
+
 ## 许可证
 
 [Apache-2.0](LICENSE)。

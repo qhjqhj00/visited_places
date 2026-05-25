@@ -97,6 +97,10 @@ service.sh  dev/prod process manager
 - sql.js rewrites the whole DB per write — fine for personal scale; swap for `better-sqlite3` / `node:sqlite` for many users.
 - Chinese city-name quality from GeoNames is uneven; mobile polish and accessibility have room to grow.
 
+## Disclaimer
+
+Map tiles, boundaries, and place names come from public, open datasets (OpenFreeMap, Natural Earth / world-atlas, GeoNames, OpenFlights). Any borders, names, or groupings shown are inherited from those sources and the app's display choices; they do not represent a political or territorial position, and this project assumes no responsibility for any geopolitical interpretation.
+
 ## License
 
 [Apache-2.0](LICENSE).
