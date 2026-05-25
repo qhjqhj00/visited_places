@@ -83,10 +83,12 @@ docker compose up --build      # → http://localhost:8080
 ```bash
 npm run data       # 从 GeoNames cities5000 生成 cities.json + neighbors.json
 npm run flights    # 从 flight.xls(你的航旅纵横导出)+ OpenFlights 生成 flights.json + airports.json
+npm run admin1     # 从 Natural Earth 10m 生成 admin1.json——全部国家的省/州/都道府县多边形
 ```
 
 - `tools/build_data.py`——GeoNames `cities5000` → 去重后约 3.9 万城市,带显著度、中英文名、省份;并预计算邻近推荐。中文名取自 GeoNames `alternateNamesV2`(简体优先)。
 - `tools/build_flights.py`——把中文机场名 → IATA → OpenFlights 坐标 → 最近的显著城市;输出航线 + 一份「中文机场→城市」映射给前端导入用。带 `--check` 可先校验再写入。
+- `tools/build_admin1.py`——Natural Earth **10m** 全国家 admin-1 多边形(50m 数据集只含 9 个大国,所以以前点进日本等国没有填充)。多边形在国家缩放级别只作平面填充,故做了 Douglas-Peucker 简化与坐标取整,并丢弃全部属性。
 
 > `flight.xls` / `flight.jpg` 已 gitignore(原始行程含客票号);仓库只提交脱敏后的 `flights.json`。
 

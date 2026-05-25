@@ -7,6 +7,7 @@ interface Poly {
   id: string;
   geometry: any;
   bbox: BBox;
+  cc?: string; // iso_a2 of the owning country (provinces only) — scopes the drill
 }
 
 // provinces: admin1 polygons (big countries only). countriesById: world 50m keyed
@@ -84,6 +85,7 @@ export function loadRegions(): Promise<void> {
       id: 'p' + i,
       geometry: f.geometry,
       bbox: bboxOf(f.geometry),
+      cc: f.properties?.iso_a2,
     }));
     const cfc: any = feature(c50, c50.objects.countries);
     // A country can appear as several features sharing one ISO id (e.g. AU =
@@ -227,10 +229,15 @@ export function allCountriesFC(ccnToCc: Map<string, string>): any {
  * city is dotted. (No whole-country fill — unvisited provinces stay uncolored.) */
 export function buildCountry(cities: City[], cc: string): ViewData {
   const inCc = cities.filter((c) => c.cc === cc);
+  // Only this country's own admin-1 polygons are eligible. Searching all of them
+  // lets a border city (e.g. Niagara Falls, NY) fall inside a neighbour's
+  // simplified polygon (Ontario) and wrongly fill it. iso_a2 is carried from
+  // Natural Earth; it matches GeoNames `cc` for every normal country.
+  const pool = provinces.filter((p) => p.cc === cc);
   const seen = new Set<string>();
   const regionFeatures: any[] = [];
   for (const c of inCc) {
-    const poly = findPoly(provinces, [c.lng, c.lat]);
+    const poly = findPoly(pool, [c.lng, c.lat]);
     if (poly && !seen.has(poly.id)) {
       seen.add(poly.id);
       regionFeatures.push({ type: 'Feature', geometry: poly.geometry, properties: {} });

@@ -85,7 +85,7 @@ export default function MapView({
   const baseData = useRef<ViewData | null>(null); // last overview view data (markers/region)
   const refreshRef = useRef<() => void>(() => {});
   const [view, setView] = useState<View>({ level: 'global' });
-  const [selectMode, setSelectMode] = useState(false);
+  const [picking, setPicking] = useState(false); // zoomed in far enough to show candidate rings
   const viewRef = useRef(view);
   viewRef.current = view;
   const latest = useRef({ cities, theme, ccnToCc, allCities, onAdd, onRemove, onPickLabel, lang, flightArcs, flightNodes, flightMode });
@@ -220,11 +220,19 @@ export default function MapView({
     const refreshOverlay = () => {
       const m = mapRef.current;
       if (!m || !ready.current) return;
-      const sel = m.getZoom() >= CANDIDATE_ZOOM || viewRef.current.level === 'country';
-      setSelectMode(sel);
-      const selected = new Set(latest.current.cities.map((c) => c.id));
-      if (sel) {
-        setMarkers(m, markersFC(latest.current.cities)); // each visited city individually
+      const zoomed = m.getZoom() >= CANDIDATE_ZOOM;
+      // "select mode" (individual visited dots + tap-to-toggle) applies when
+      // zoomed in OR drilled into a country.
+      const sel = zoomed || viewRef.current.level === 'country';
+      setPicking(zoomed); // the "tap a ring" hint only makes sense once rings show
+      if (sel) setMarkers(m, markersFC(latest.current.cities)); // each visited city individually
+      else if (baseData.current) setMarkers(m, baseData.current.markerFC);
+      // Candidate (unselected) dots only earn their keep once you're zoomed in
+      // enough to pick them out. At a country-overview scale (e.g. all of Japan)
+      // the hundreds of hollow dots are just clutter, so keep them hidden until
+      // the user zooms past CANDIDATE_ZOOM — independent of the drill level.
+      if (zoomed) {
+        const selected = new Set(latest.current.cities.map((c) => c.id));
         const b = m.getBounds();
         const w = b.getWest(), s = b.getSouth(), east = b.getEast(), n = b.getNorth();
         const inView: City[] = [];
@@ -235,7 +243,6 @@ export default function MapView({
         inView.sort((a, b2) => b2.prom - a.prom);
         setCandidates(m, candidatesFC(inView.slice(0, CANDIDATE_CAP)));
       } else {
-        if (baseData.current) setMarkers(m, baseData.current.markerFC);
         setCandidates(m, { type: 'FeatureCollection', features: [] });
       }
     };
@@ -357,7 +364,7 @@ export default function MapView({
           ← {t('map.back')}{focusCountry ? ` · ${focusCountry}` : ''}
         </button>
       )}
-      {selectMode && (
+      {picking && (
         <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-land-border bg-surface/90 px-3 py-1 text-xs text-muted shadow-soft backdrop-blur">
           {t('map.selectHint')}
         </div>

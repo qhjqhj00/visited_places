@@ -85,10 +85,12 @@ The bundled JSON in `apps/web/public/data/` is generated — committed so the ap
 ```bash
 npm run data       # cities.json + neighbors.json from GeoNames cities5000
 npm run flights    # flights.json + airports.json from flight.xls (your 航旅纵横 export) + OpenFlights
+npm run admin1     # admin1.json — province/state/prefecture polygons (all countries) from Natural Earth 10m
 ```
 
 - `tools/build_data.py` — GeoNames `cities5000` → ~39k cities (deduped) with prominence, bilingual names, provinces; precomputed neighbor recommendations.
 - `tools/build_flights.py` — maps Chinese airport names → IATA → OpenFlights coords → nearest prominent city; emits routes + a `zh-airport → city` map used by the in-app importer. Run with `--check` to validate before writing.
+- `tools/build_admin1.py` — Natural Earth **10m** admin-1 polygons for every country (the 50m set only ships 9 large ones, so drilling into e.g. Japan filled nothing). Geometry is Douglas-Peucker–simplified and coordinate-rounded since it renders as flat fills at country zoom; all properties are dropped.
 
 > `flight.xls` / `flight.jpg` are git-ignored (a raw itinerary contains ticket numbers); only the sanitized `flights.json` is committed.
 
