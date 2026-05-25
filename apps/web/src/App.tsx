@@ -62,6 +62,8 @@ export default function App() {
         })
         .catch(() => {});
     }
+    // Runs once (guarded by `booted`); intentionally keyed on length, not `ids`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids.length, replace]);
 
   const saveTimer = useRef<number | undefined>(undefined);

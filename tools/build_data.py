@@ -11,9 +11,9 @@ Outputs (apps/web/public/data/):
   - cities.json    list of {id,en,zh,country,cc,cont,lat,lng,pop,prom,fcode}
   - neighbors.json {id: [neighbor_id, ...]}  top-12 by prominence*exp(-dist/120) within 350km
 
-name_zh is a heuristic: the shortest CJK alternate name that contains Han
-characters and no kana/hangul. Good enough for v1; upgrade path is the
-language-tagged alternateNamesV2 file (isolanguage='zh', isPreferredName).
+name_zh comes from the language-tagged alternateNamesV2 file (Simplified Mandarin,
+preferring short everyday names over verbose official forms), falling back to the
+untagged-alternatenames `pick_zh` heuristic when no tagged zh name exists.
 """
 import io
 import json
@@ -32,6 +32,12 @@ OUT = os.path.join(ROOT, "apps", "web", "public", "data")
 CITIES_URL = "https://download.geonames.org/export/dump/cities5000.zip"
 CITIES_TXT = "cities5000.txt"  # member inside the zip (pop > 5,000, ~55k places)
 COUNTRY_URL = "https://download.geonames.org/export/dump/countryInfo.txt"
+# Language-tagged alternate names — the accurate source for Chinese city names
+# (the cities5000 alternatenames column is untagged, hence the weak pick_zh below).
+ALT_URL = "https://download.geonames.org/export/dump/alternateNamesV2.zip"
+ALT_TXT = "alternateNamesV2.txt"
+# Simplified Mandarin only — skip zh-Hant (traditional) and dialects (yue/wuu).
+ZH_LANGS = {"zh-hans": 3, "zh-cn": 2, "zh": 2, "cmn": 1}
 
 HAN = re.compile(r"[㐀-䶿一-鿿豈-﫿]")
 KANA = re.compile(r"[぀-ヿㇰ-ㇿ]")
@@ -80,6 +86,45 @@ def load_countries():
             iso, numeric, name, cont = c[0], c[2], c[4], c[8]
             out[iso] = (name, CONTINENTS.get(cont, cont), numeric)
     return out
+
+
+def load_zh_names(geonameids):
+    """geonameid -> best Simplified-Mandarin name from alternateNamesV2 (streamed
+    from the zip). Ranks by preferred/short flags + language weight, prefers 2-4
+    char Han names, and skips kana/hangul and historic entries."""
+    zpath = fetch(ALT_URL, os.path.join(CACHE, os.path.basename(ALT_URL)))
+    best = {}  # gid -> (score, name)
+    with zipfile.ZipFile(zpath) as z, z.open(ALT_TXT) as raw:
+        for line in io.TextIOWrapper(raw, encoding="utf-8"):
+            f = line.rstrip("\n").split("\t")
+            if len(f) < 4:
+                continue
+            try:
+                gid = int(f[1])
+            except ValueError:
+                continue
+            if gid not in geonameids:
+                continue
+            lw = ZH_LANGS.get(f[2].lower())
+            if lw is None:
+                continue
+            name = f[3].strip()
+            if not name or not HAN.search(name) or KANA.search(name) or HANGUL.search(name):
+                continue
+            pref = len(f) > 4 and f[4] == "1"
+            short = len(f) > 5 and f[5] == "1"
+            hist = len(f) > 7 and f[7] == "1"
+            # Favor a concise everyday name over the verbose official form: the
+            # "preferred" name is often e.g. 首尔特别市 / 奧克蘭都會區, while the
+            # short flag / a 2-4 char length gives 首尔 / 奥克兰.
+            n = len(name)
+            score = lw + (3 if short else 0) + (2 if pref else 0)
+            score += 2 if 2 <= n <= 4 else (-1 if n == 5 else -3 if n >= 6 else 0)
+            if hist:
+                score -= 4
+            if best.get(gid, (-99,))[0] < score:
+                best[gid] = (score, name)
+    return {gid: nm for gid, (_, nm) in best.items()}
 
 
 def pick_zh(alt_field):
@@ -231,6 +276,17 @@ def main():
     print(f"  dropped {dropped} subdivisions -> {len(cities)} cities")
     for c in cities:
         del c["_a1"], c["_a2"]
+
+    print("Loading Chinese names from alternateNamesV2 ...")
+    zhmap = load_zh_names({c["id"] for c in cities})
+    upgraded = 0
+    for c in cities:
+        nm = zhmap.get(c["id"])
+        if nm and nm != c["zh"]:
+            c["zh"] = nm
+            upgraded += 1
+    print(f"  {len(zhmap)} cities have zh from alternateNamesV2 "
+          f"({upgraded} changed); {sum(1 for c in cities if c['zh'])} total have zh")
 
     print("Building neighbors ...")
     neighbors = build_neighbors(cities)

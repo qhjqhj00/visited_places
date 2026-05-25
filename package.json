@@ -1,7 +1,27 @@
 {
-  "name": "visited-places",
+  "name": "life-map",
   "private": true,
   "version": "0.1.0",
+  "description": "Life Map — chart the cities you've visited and the routes you've flown on a tasteful, interactive world map. Two-level map, hybrid local+LLM recommendations, great-circle flight arcs, bilingual UI, shareable poster export.",
+  "homepage": "https://github.com/qhjqhj00/visited_places#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qhjqhj00/visited_places.git"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "travel",
+    "map",
+    "maplibre",
+    "flight-map",
+    "great-circle",
+    "data-viz",
+    "react",
+    "geonames"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "workspaces": [
     "apps/*",
     "packages/*"
@@ -11,6 +31,20 @@
     "dev:api": "npm run dev -w apps/api",
     "build": "npm run build -w apps/web",
     "preview": "npm run preview -w apps/web",
-    "data": "python3 tools/build_data.py"
+    "typecheck": "tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json",
+    "test": "npm run test -w apps/web",
+    "e2e": "playwright test",
+    "lint": "eslint .",
+    "data": "python3 tools/build_data.py",
+    "flights": "python3 tools/build_flights.py"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.60.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.3",
+    "typescript-eslint": "^8.59.4"
   }
 }
