@@ -16,7 +16,7 @@ type Entry = { zh: Val; en: Val };
 
 // One flat dictionary. Values are strings, or functions when they interpolate.
 const STRINGS: Record<string, Entry> = {
-  'app.title': { zh: '我的世界地图', en: 'My World Map' },
+  'app.title': { zh: 'Life Map', en: 'Life Map' },
   'app.subtitle': {
     zh: '选择去过的城市，看着它在地图上长出来',
     en: 'Pick the places you’ve been — watch your map grow',
@@ -33,6 +33,20 @@ const STRINGS: Record<string, Entry> = {
   'routes.empty': { zh: '还没有航线，在上方添加一条', en: 'No routes yet — add one above' },
   'routes.search': { zh: '搜索城市', en: 'Search a city' },
   'routes.count': { zh: (n: number) => `${n} 条航线`, en: (n: number) => `${n} ${n === 1 ? 'route' : 'routes'}` },
+  'routes.import': { zh: '导入航旅纵横', en: 'Import 航旅纵横' },
+  'routes.importing': { zh: '解析中…', en: 'Parsing…' },
+  'routes.imported': {
+    zh: (n: number, u: number) => `已导入 ${n} 条航线${u ? `，${u} 个机场未识别` : ''}`,
+    en: (n: number, u: number) => `Imported ${n} routes${u ? `, ${u} airports unrecognized` : ''}`,
+  },
+  'routes.importFail': {
+    zh: '解析失败，请确认是航旅纵横导出的 Excel',
+    en: 'Parse failed — make sure it’s a 航旅纵横 Excel export',
+  },
+  'routes.importHint': {
+    zh: '上传航旅纵横「我的行程」导出的 Excel，自动识别已飞航段',
+    en: 'Upload the Excel exported from 航旅纵横; flown legs are detected automatically',
+  },
   'app.linkCopied': { zh: '已复制分享链接：', en: 'Share link copied:' },
   'app.loadError': { zh: (e: string) => `数据加载失败：${e}`, en: (e: string) => `Failed to load data: ${e}` },
   'app.loading': { zh: '正在加载城市数据…', en: 'Loading city data…' },
@@ -108,7 +122,7 @@ const STRINGS: Record<string, Entry> = {
   'theme.apple': { zh: 'Apple', en: 'Apple' },
   'theme.nordic': { zh: '北欧', en: 'Nordic' },
 
-  'poster.watermark': { zh: '我的世界地图 · visited.places', en: 'My World Map · visited.places' },
+  'poster.watermark': { zh: 'Life Map · visited.places', en: 'Life Map · visited.places' },
 };
 
 /** Plain (non-React) lookup so canvas/export code can translate too. */

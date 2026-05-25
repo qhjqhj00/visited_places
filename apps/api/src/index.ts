@@ -8,7 +8,41 @@ import { byId, resolveCity } from './cities';
 import { expandCities } from './minimax';
 
 const app = new Hono();
-app.use('/api/*', cors());
+
+// CORS: lock to CORS_ORIGINS in production; reflect any origin in dev (unset).
+const corsOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+app.use('/api/*', cors(corsOrigins.length ? { origin: corsOrigins } : {}));
+
+// Reject oversized payloads early (defense-in-depth with the per-handler caps).
+const MAX_BODY = 4 * 1024 * 1024;
+app.use('/api/*', async (c, next) => {
+  if (Number(c.req.header('content-length') || 0) > MAX_BODY)
+    return c.json({ error: 'payload too large' }, 413);
+  await next();
+});
+
+// Tiny in-memory sliding-window rate limiter (per client IP) — no dependency.
+function rateLimit(windowMs: number, max: number) {
+  const hits = new Map<string, number[]>();
+  return async (c: any, next: any) => {
+    const ip =
+      c.req.header('x-forwarded-for')?.split(',')[0].trim() ||
+      c.req.header('x-real-ip') ||
+      'local';
+    const now = Date.now();
+    const arr = (hits.get(ip) || []).filter((t) => now - t < windowMs);
+    if (arr.length >= max) return c.json({ error: 'rate limited, slow down' }, 429);
+    arr.push(now);
+    hits.set(ip, arr);
+    if (hits.size > 10000) for (const [k, v] of hits) if (!v.some((t) => now - t < windowMs)) hits.delete(k);
+    await next();
+  };
+}
+app.use('/api/*', rateLimit(60_000, 600)); // generous global
+app.use('/api/expand', rateLimit(60_000, 20)); // strict: the LLM lane costs money
 
 app.get('/api/health', (c) => c.json({ ok: true, cities: byId.size }));
 
@@ -22,7 +56,7 @@ app.put('/api/map', async (c) => {
   const uid = c.req.header('x-user-id');
   if (!uid) return c.json({ error: 'missing x-user-id' }, 400);
   const body = await c.req.json().catch(() => ({}));
-  const ids = (body.ids ?? []).filter((x: unknown) => Number.isInteger(x));
+  const ids = (body.ids ?? []).filter((x: unknown) => Number.isInteger(x)).slice(0, 100_000);
   store.setMap(uid, ids);
   return c.json({ ok: true, count: ids.length });
 });
@@ -37,9 +71,9 @@ app.put('/api/places', async (c) => {
   const uid = c.req.header('x-user-id');
   if (!uid) return c.json({ error: 'missing x-user-id' }, 400);
   const body = await c.req.json().catch(() => ({}));
-  const places = (Array.isArray(body.places) ? body.places : []).filter(
-    (p: any) => p && typeof p.id === 'number' && typeof p.lat === 'number' && typeof p.lng === 'number'
-  );
+  const places = (Array.isArray(body.places) ? body.places : [])
+    .filter((p: any) => p && typeof p.id === 'number' && typeof p.lat === 'number' && typeof p.lng === 'number')
+    .slice(0, 50_000);
   store.setPlaces(uid, places);
   return c.json({ ok: true, count: places.length });
 });
@@ -74,7 +108,8 @@ app.put('/api/flights', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const routes = (Array.isArray(body.routes) ? body.routes : [])
     .filter((r: any) => r && Number.isInteger(r.a) && Number.isInteger(r.b) && r.a !== r.b)
-    .map((r: any) => ({ a: r.a, b: r.b, n: Number.isFinite(r.n) && r.n > 0 ? Math.floor(r.n) : 1 }));
+    .map((r: any) => ({ a: r.a, b: r.b, n: Number.isFinite(r.n) && r.n > 0 ? Math.floor(r.n) : 1 }))
+    .slice(0, 50_000);
   store.setFlights(uid, routes);
   return c.json({ ok: true, count: routes.length });
 });
@@ -106,6 +141,8 @@ app.post('/api/expand', async (c) => {
   let ids = store.getCache(anchorId);
   const cached = ids !== undefined;
   if (ids === undefined) {
+    if (!process.env.MINIMAX_API_KEY)
+      return c.json({ error: 'smart expand disabled (no MINIMAX_API_KEY configured)' }, 503);
     try {
       const recs = await expandCities(
         { en: anchor.en, zh: anchor.zh, country: anchor.country },

@@ -26,7 +26,7 @@ export default function App() {
   const { data, error } = useCityData();
   const { ids, add, remove, clear, replace } = useVisited();
   const { places: customPlaces, addPlace } = useCustomPlaces();
-  const { routes: flightRoutes, addRoute, removeRoute, setRouteCount } = useFlights();
+  const { routes: flightRoutes, addRoute, removeRoute, setRouteCount, upsertRoutes } = useFlights();
 
   const [themeName, setThemeName] = useState<string>(
     () => localStorage.getItem('theme.v1') || 'claude'
@@ -62,6 +62,8 @@ export default function App() {
         })
         .catch(() => {});
     }
+    // Runs once (guarded by `booted`); intentionally keyed on length, not `ids`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ids.length, replace]);
 
   const saveTimer = useRef<number | undefined>(undefined);
@@ -248,9 +250,12 @@ export default function App() {
   return (
     <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-4 p-4 md:p-6">
       <header className="flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-3xl text-ink">{t('app.title')}</h1>
-          <p className="mt-0.5 text-sm text-muted">{t('app.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <img src="/logo.svg" alt="Life Map" className="h-10 w-10 shrink-0" />
+          <div>
+            <h1 className="font-display text-3xl text-ink">{t('app.title')}</h1>
+            <p className="mt-0.5 text-sm text-muted">{t('app.subtitle')}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <UserMenu />
@@ -356,6 +361,7 @@ export default function App() {
           onAdd={addRoute}
           onRemove={removeRoute}
           onSetCount={setRouteCount}
+          onImport={upsertRoutes}
           onClose={() => setShowRoutes(false)}
         />
       )}
