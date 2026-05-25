@@ -28,6 +28,7 @@ XLS = os.path.join(ROOT, "flight.xls")
 AIRPORTS_DAT = os.path.join(ROOT, "tools", ".cache", "airports.dat")
 CITIES_JSON = os.path.join(ROOT, "apps", "web", "public", "data", "cities.json")
 OUT = os.path.join(ROOT, "apps", "web", "public", "data", "flights.json")
+AIRPORTS_OUT = os.path.join(ROOT, "apps", "web", "public", "data", "airports.json")
 
 # Chinese airport name (as it appears in the sheet) → IATA code.
 AIRPORT_IATA = {
@@ -216,6 +217,12 @@ def main():
     }
     json.dump(out, open(OUT, "w", encoding="utf-8"), ensure_ascii=False)
     print(f"wrote {OUT}: {len(routes)} routes, {len(city_ids)} cities, {total_km} km")
+
+    # zh-airport-name → snapped cityId, so the browser can resolve uploaded
+    # 航旅纵横 files accurately for these (known) airports.
+    airmap = {name: v["cityId"] for name, v in air.items()}
+    json.dump(airmap, open(AIRPORTS_OUT, "w", encoding="utf-8"), ensure_ascii=False)
+    print(f"wrote {AIRPORTS_OUT}: {len(airmap)} airport→city mappings")
 
 
 if __name__ == "__main__":

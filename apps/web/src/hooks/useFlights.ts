@@ -58,5 +58,19 @@ export function useFlights() {
     );
   }, []);
 
-  return { routes, addRoute, removeRoute, setRouteCount, routeKey: key };
+  // Import: upsert by route key — sets each incoming route's count (overwrites an
+  // existing pair, adds new ones), keeping manual routes. Re-importing the same
+  // file is idempotent rather than doubling the counts.
+  const upsertRoutes = useCallback((incoming: FlightRoute[]) => {
+    setRoutes((prev) => {
+      const m = new Map(prev.map((r) => [key(r.a, r.b), r]));
+      for (const r of incoming) {
+        if (r.a === r.b) continue;
+        m.set(key(r.a, r.b), { a: r.a, b: r.b, n: Math.max(1, Math.floor(r.n) || 1) });
+      }
+      return [...m.values()];
+    });
+  }, []);
+
+  return { routes, addRoute, removeRoute, setRouteCount, upsertRoutes, routeKey: key };
 }

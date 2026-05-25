@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { CityData } from '../hooks/useCityData';
 import type { FlightRoute } from '../hooks/useFlights';
 import type { City } from '../types';
 import { useT, cityName } from '../lib/i18n';
 import { countryName } from '../lib/countries';
+import { importVariflight } from '../lib/importVariflight';
 
 interface PickerProps {
   data: CityData;
@@ -79,14 +80,35 @@ interface Props {
   onAdd: (a: number, b: number, n: number) => void;
   onRemove: (a: number, b: number) => void;
   onSetCount: (a: number, b: number, n: number) => void;
+  onImport: (routes: FlightRoute[]) => void;
   onClose: () => void;
 }
 
-export default function RoutesPanel({ data, byId, routes, onAdd, onRemove, onSetCount, onClose }: Props) {
+export default function RoutesPanel({ data, byId, routes, onAdd, onRemove, onSetCount, onImport, onClose }: Props) {
   const { t, lang } = useT();
   const [from, setFrom] = useState<number | null>(null);
   const [to, setTo] = useState<number | null>(null);
   const [times, setTimes] = useState(1);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    setImporting(true);
+    setStatus(null);
+    try {
+      const res = await importVariflight(f, data);
+      onImport(res.routes);
+      setStatus(t('routes.imported', res.routes.length, res.unresolved.length));
+    } catch {
+      setStatus(t('routes.importFail'));
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const sorted = useMemo(() => [...routes].sort((a, b) => b.n - a.n), [routes]);
   const name = (id: number) => {
@@ -115,6 +137,24 @@ export default function RoutesPanel({ data, byId, routes, onAdd, onRemove, onSet
           <button onClick={onClose} className="text-muted hover:text-accent" aria-label={t('common.close')}>
             ×
           </button>
+        </div>
+
+        {/* import from 航旅纵横 */}
+        <div className="mb-3 flex items-center gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={importing}
+            className="shrink-0 rounded-lg border border-land-border px-3 py-1.5 text-sm text-ink hover:border-accent disabled:opacity-50"
+          >
+            📤 {importing ? t('routes.importing') : t('routes.import')}
+          </button>
+          <input ref={fileRef} type="file" accept=".xls,.xlsx" onChange={onFile} className="hidden" />
+          <span
+            className={`min-w-0 truncate text-xs ${status ? 'text-accent' : 'text-muted'}`}
+            title={status || t('routes.importHint')}
+          >
+            {status || t('routes.importHint')}
+          </span>
         </div>
 
         {/* add form */}

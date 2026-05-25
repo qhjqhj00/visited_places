@@ -26,7 +26,7 @@ export default function App() {
   const { data, error } = useCityData();
   const { ids, add, remove, clear, replace } = useVisited();
   const { places: customPlaces, addPlace } = useCustomPlaces();
-  const { routes: flightRoutes, addRoute, removeRoute, setRouteCount } = useFlights();
+  const { routes: flightRoutes, addRoute, removeRoute, setRouteCount, upsertRoutes } = useFlights();
 
   const [themeName, setThemeName] = useState<string>(
     () => localStorage.getItem('theme.v1') || 'claude'
@@ -356,6 +356,7 @@ export default function App() {
           onAdd={addRoute}
           onRemove={removeRoute}
           onSetCount={setRouteCount}
+          onImport={upsertRoutes}
           onClose={() => setShowRoutes(false)}
         />
       )}
