@@ -1,0 +1,19 @@
+# One-command self-host:  docker compose up --build   →   http://localhost:8080
+services:
+  lifemap:
+    build: .
+    ports:
+      - '8080:8080'
+    environment:
+      - DB_FILE=/data/data.sqlite
+      # Optional — enables the LLM "smart expand"; the app works fully without it.
+      # - MINIMAX_API_KEY=your-key
+      # - MINIMAX_MODEL_NAME=MiniMax-M2.7
+      # Lock CORS in production (comma-separated origins):
+      # - CORS_ORIGINS=https://your-domain.example
+    volumes:
+      - lifemap-data:/data
+    restart: unless-stopped
+
+volumes:
+  lifemap-data:
