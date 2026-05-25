@@ -166,6 +166,11 @@ function clipToVisited(geom: any, cities: City[]): any {
   return kept.length ? { type: 'MultiPolygon', coordinates: kept } : geom;
 }
 
+// One-China entity: mainland + Taiwan + Hong Kong + Macao are treated as a single
+// unit — visiting a city in any of them fills all four (solid, unclipped) blocks.
+const CHINA_CC = new Set(['CN', 'TW', 'HK', 'MO']);
+const CHINA_CCN = ['156', '158', '344', '446']; // CN / TW / HK / MO ISO-numeric
+
 /** Global: countries filled, one dot per visited province (cc+adm1 group). */
 export function buildGlobal(cities: City[]): ViewData {
   const repByCc = new Map<string, City>();
@@ -179,7 +184,18 @@ export function buildGlobal(cities: City[]): ViewData {
   }
   const seen = new Set<string>();
   const regionFeatures: any[] = [];
+  // fill the whole China entity if any of its parts has a visited city
+  if (cities.some((c) => CHINA_CC.has(c.cc))) {
+    for (const ccn of CHINA_CCN) {
+      const poly = countriesById.get(ccn);
+      if (poly && !seen.has(poly.id)) {
+        seen.add(poly.id);
+        regionFeatures.push({ type: 'Feature', geometry: poly.geometry, properties: { cc: 'CN' } });
+      }
+    }
+  }
   for (const [cc, rep] of repByCc) {
+    if (CHINA_CC.has(cc)) continue; // handled as one entity above
     const poly = countriesById.get(rep.ccn);
     if (poly && !seen.has(poly.id)) {
       seen.add(poly.id);
